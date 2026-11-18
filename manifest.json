@@ -1,0 +1,14 @@
+{
+  "name": "MicFX Pitch Lab",
+  "description": "Experimental native pitch control UI; requires separately compiled MicFX.dylib. Includes gain and filter controls.",
+  "authors": [
+    {
+      "name": "MicFX"
+    }
+  ],
+  "main": "index.js",
+  "hash": "67d0a32f79ec0f28ebfc65ea546a5ae569993b670b95dae3066c46ad03ae2468",
+  "vendetta": {
+    "icon": "MicrophoneIcon"
+  }
+}
