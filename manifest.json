@@ -1,0 +1,14 @@
+{
+  "name": "MicFX Probe 1",
+  "description": "Manual read-only microphone capability discovery. Reports module and method names only. No audio recording or processing changes.",
+  "authors": [
+    {
+      "name": "MicFX"
+    }
+  ],
+  "main": "index.js",
+  "hash": "daab27ffb499873ca7fe3ccc60a23d4ad9590e96ae48278ba100f65a7c5a8bba",
+  "vendetta": {
+    "icon": "MicrophoneIcon"
+  }
+}
