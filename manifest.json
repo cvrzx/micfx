@@ -1,0 +1,14 @@
+{
+  "name": "MicFX Alpha 1",
+  "description": "Experimental gain and original filter controls, stereo encoder request and pitch/width previews with built-in diagnostics.",
+  "authors": [
+    {
+      "name": "MicFX"
+    }
+  ],
+  "main": "index.js",
+  "hash": "727c5c42d0e2e8f97bf9cbbff34bccaa02fdd81a69d560b136e9353deced6a3e",
+  "vendetta": {
+    "icon": "MicrophoneIcon"
+  }
+}
