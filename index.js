@@ -115,59 +115,69 @@
       h(RN.Text,{selectable:true,style:{color:'#dbdee1',backgroundColor:'#202124',borderRadius:8,padding:12,marginTop:18,fontSize:12,fontFamily:'Menlo'}},text||'No scan yet. Join a call, then scan.'));
   }
   // Only numeric preferences and booleans are persisted; no audio or account data.
-  const defaults={musicEnabled:false,musicCallMix:false,musicVolume:50,micVolume:100,gain:0,bypass:false,stereo:false,pitchEnabled:false,pitch:0,detune:0,blend:100,width:0,autoEnable:true,chatButton:false,startupNotice:true,eqEnabled:true,eq0:0,eq1:0,eq2:0,eq3:0,eq4:0,eq5:0,eq6:0,eq7:0};
-  const cfg={...defaults}, storage=vendetta.plugin?.storage, limits={musicVolume:[0,100],micVolume:[0,100],gain:[-12,12],pitch:[-12,12],detune:[-100,100],blend:[0,100],width:[0,100],...Object.fromEntries(Array.from({length:8},(_,i)=>["eq"+i,[-12,12]]))};
+  const defaults={musicEnabled:false,musicCallMix:true,musicPitchEnabled:false,musicAdvancedGainEnabled:false,musicVolume:50,micVolume:100,gain:0,advancedGainEnabled:false,advancedGainDb:0,bypass:false,stereo:false,pitchEnabled:false,pitch:0,detune:0,blend:100,width:0,autoEnable:true,chatButton:false,startupNotice:true,eqEnabled:true,eq0:0,eq1:0,eq2:0,eq3:0,eq4:0,eq5:0,eq6:0,eq7:0};
+  const cfg={...defaults}, storage=vendetta.plugin?.storage, limits={musicVolume:[0,100],micVolume:[0,100],gain:[-12,12],advancedGainDb:[0,240],pitch:[-12,12],detune:[-100,100],blend:[0,100],width:[0,100],...Object.fromEntries(Array.from({length:8},(_,i)=>["eq"+i,[-12,12]]))};
   const eqLabels=["85 Hz · Bass shelf","150 Hz · Warmth","300 Hz · Body","600 Hz · Low mids","1.2 kHz · Mids","2.4 kHz · Presence","4.8 kHz · Clarity","8 kHz · Air shelf"];
   const eqPresets={Flat:[0,0,0,0,0,0,0,0],Deep:[5,4,1,-2,-1,0,0,0],Warm:[2,3,2,0,-1,0,0,-1],Clear:[-2,-2,-1,0,1,3,2,1]};
   const listeners=new Set(); let storageOK=!!storage;
   function notify(){for(const f of [...listeners]){try{f();}catch(_){}}}
   function save(){try{if(!storage)throw 0;storage.micfxConfig={...cfg};storageOK=true;}catch(_){storageOK=false;}notify();}
   function load(){try{const prior=storage?.micfxConfig;for(const k of Object.keys(defaults)){const v=prior?.[k];if(typeof defaults[k]==='boolean'){if(typeof v==='boolean')cfg[k]=v;}else if(typeof v==='number'&&Number.isFinite(v))cfg[k]=clamp(v,...limits[k]);}}catch(_){storageOK=false;}}
-  // Named presets are stored separately from the active configuration; they never
-  // overwrite startup preferences, and loading them applies all audio fields at once.
-  const presetKeys=['musicEnabled','musicCallMix','musicVolume','micVolume','gain','bypass','stereo','pitchEnabled','pitch','detune','blend','eqEnabled',...Array.from({length:8},(_,i)=>'eq'+i)];
-  const savedPresets=Object.create(null);
-  function normalizePreset(raw){
-    if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
-    const clean={};
-    for(const k of presetKeys){const v=raw[k];if(typeof defaults[k]==='boolean'){
-      if(typeof v==='boolean')clean[k]=v;
-    }else if(typeof v==='number'&&Number.isFinite(v))clean[k]=clamp(v,...limits[k]);}
-    return Object.keys(clean).length?clean:null;
-  }
-  function presetNameSafe(raw){
-    if(typeof raw!=='string')return '';
-    const n=raw.trim().replace(/\s+/g,' ').slice(0,32);
-    return n==='__proto__'||n==='prototype'||n==='constructor'?'':n;
-  }
-  function readPresets(){
-    try{const data=storage?.micfxSavedPresets;
-      if(!data||typeof data!=='object'||Array.isArray(data))return;
-      for(const [name,raw] of Object.entries(data).slice(0,20)){
-        const safe=presetNameSafe(name),valid=normalizePreset(raw);
-        if(safe&&valid)savedPresets[safe]=valid;
+  const presetKeys=['musicEnabled','musicCallMix','musicPitchEnabled','musicAdvancedGainEnabled','musicVolume','micVolume','pitchEnabled','gain','advancedGainEnabled','advancedGainDb','pitch','detune','blend','eqEnabled','stereo','bypass','width',...Array.from({length:8},(_,i)=>'eq'+i)];
+  function presetSnapshot(){return Object.fromEntries(presetKeys.map(k=>[k,cfg[k]]));}
+  function migratePresets(){
+    try{
+      if(!storage||storage.micfxV42PresetMigrationDone)return;
+      const previous=storage.micfxSavedPresets;
+      const existing=Array.isArray(storage.micfxPresets)?storage.micfxPresets.filter(x=>x&&typeof x.name==='string'&&x.values&&typeof x.values==='object').slice(0,20):[];
+      if(previous&&typeof previous==='object'&&!Array.isArray(previous)){
+        for(const [name,values] of Object.entries(previous)){
+          const safe=String(name||'').trim().slice(0,36);
+          if(!safe||!values||typeof values!=='object'||Array.isArray(values))continue;
+          if(existing.length>=20)break;
+          if(!existing.some(x=>x.name.toLowerCase()===safe.toLowerCase()))existing.push({name:safe,values});
+        }
       }
+      storage.micfxPresets=existing;
+      storage.micfxV42PresetMigrationDone=true;
     }catch(_){storageOK=false;}
   }
-  function persistPresets(){
-    try{if(!storage)throw 0;storage.micfxSavedPresets={...savedPresets};storageOK=true;notify();return true;}
-    catch(_){storageOK=false;notify();return false;}
+  function savedPresets(){
+    try{const data=storage?.micfxPresets;if(!Array.isArray(data))return [];
+      return data.filter(x=>x&&typeof x.name==='string'&&x.name.length>0&&x.name.length<=36&&x.values&&typeof x.values==='object').slice(0,20);
+    }catch(_){return [];}
   }
   function saveNamedPreset(name){
-    const safe=presetNameSafe(name);if(!safe)return 'Enter a preset name.';
-    if(!Object.prototype.hasOwnProperty.call(savedPresets,safe)&&Object.keys(savedPresets).length>=20)return 'Maximum 20 presets.';
-    const values={};for(const k of presetKeys)values[k]=cfg[k];
-    savedPresets[safe]=values;
-    return persistPresets()?'Saved "'+safe+'".':'Storage unavailable; preset was not saved.';
+    const trimmed=String(name||'').trim().slice(0,36);
+    if(!trimmed)return 'Enter a preset name first.';
+    try{
+      if(!storage)throw Error('Storage unavailable');
+      const items=savedPresets(),i=items.findIndex(x=>x.name.toLowerCase()===trimmed.toLowerCase());
+      const item={name:trimmed,values:presetSnapshot()};
+      if(i!==-1)items[i]=item;
+      else if(items.length>=20)return 'Limit reached: delete a preset before saving another.';
+      else items.push(item);
+      storage.micfxPresets=items;notify();
+      return i!==-1?'Updated preset: '+trimmed:'Saved preset: '+trimmed;
+    }catch(_){return 'Could not save preset. Check plugin storage.';}
   }
   function loadNamedPreset(name){
-    const values=normalizePreset(savedPresets[name]);if(!values)return 'Preset unavailable.';
-    Object.assign(cfg,values);save();void applyControls();
-    return 'Loaded "'+name+'".';
+    const item=savedPresets().find(x=>x.name===name);
+    if(!item)return 'Preset not found.';
+    for(const k of presetKeys){
+      const v=item.values[k];
+      if(typeof defaults[k]==='boolean'){if(typeof v==='boolean')cfg[k]=v;}
+      else if(typeof v==='number'&&Number.isFinite(v)&&limits[k])cfg[k]=clamp(v,...limits[k]);
+    }
+    save();void applyControls();
+    return 'Loaded preset: '+name;
   }
   function deleteNamedPreset(name){
-    if(!Object.prototype.hasOwnProperty.call(savedPresets,name))return 'Preset unavailable.';
-    delete savedPresets[name];return persistPresets()?'Deleted "'+name+'".':'Storage unavailable; deletion not saved.';
+    try{if(!storage)throw Error('Storage unavailable');
+      const items=savedPresets(),remaining=items.filter(x=>x.name!==name);
+      if(remaining.length===items.length)return 'Preset not found.';
+      storage.micfxPresets=remaining;notify();return 'Deleted preset: '+name;
+    }catch(_){return 'Could not delete preset.';}
   }
   function useRefresh(){const [,set]=React.useState(0);React.useEffect(()=>{const f=()=>set(x=>x+1);listeners.add(f);return ()=>listeners.delete(f);},[]);return ()=>set(x=>x+1);}
 
@@ -200,7 +210,7 @@
   const nativeStatus=()=>readNative('MicFXPitchStatus')||'Native library not detected (or status not yet available).';
   let nativeWatch=null;let request=0, writing=false, startupTimer=null, startupRun=0, applyAgain=false, startupState='Not checked', chatHooks=0, chatSeen=0;
   function nativeDisable(){try{RN.Settings?.set?.({MicFXPitchEnabled:0,MicFXMusicEnabled:0,MicFXMusicCallMix:0});}catch(_){}}
-  function applyNative(){if(typeof RN.Settings?.set!=='function')throw Error('iOS Settings bridge unavailable');request=Math.max(Date.now(),request+1);RN.Settings.set({MicFXPitchEnabled:cfg.pitchEnabled?1:0,MicFXPitchSemitones:cfg.pitch,MicFXPitchDetune:cfg.detune,MicFXPitchBlend:cfg.blend,MicFXPitchGain:cfg.gain,MicFXEQEnabled:cfg.eqEnabled?1:0,...Object.fromEntries(eqLabels.map((_,i)=>["MicFXEQ"+i,cfg["eq"+i]])),MicFXMusicEnabled:cfg.musicEnabled?1:0,MicFXMusicCallMix:cfg.musicCallMix?1:0,MicFXMusicVolume:cfg.musicVolume,MicFXMicVolume:cfg.micVolume,MicFXRequestID:request});return cfg.pitchEnabled?'Native pitch, EQ and gain settings sent.':'Native processor disabled.';}
+  function applyNative(){if(typeof RN.Settings?.set!=='function')throw Error('iOS Settings bridge unavailable');request=Math.max(Date.now(),request+1);RN.Settings.set({MicFXPitchEnabled:cfg.pitchEnabled?1:0,MicFXPitchSemitones:cfg.pitch,MicFXPitchDetune:cfg.detune,MicFXPitchBlend:cfg.blend,MicFXPitchGain:cfg.gain,MicFXAdvancedGainEnabled:cfg.advancedGainEnabled?1:0,MicFXAdvancedGainDb:cfg.advancedGainDb,MicFXEQEnabled:cfg.eqEnabled?1:0,...Object.fromEntries(eqLabels.map((_,i)=>["MicFXEQ"+i,cfg["eq"+i]])),MicFXMusicEnabled:cfg.musicEnabled?1:0,MicFXMusicCallMix:cfg.musicCallMix?1:0,MicFXMusicPitchEnabled:cfg.musicPitchEnabled?1:0,MicFXMusicAdvancedGainEnabled:cfg.musicAdvancedGainEnabled?1:0,MicFXMusicVolume:cfg.musicVolume,MicFXMicVolume:cfg.micVolume,MicFXRequestID:request});return cfg.pitchEnabled?'Native pitch, EQ and gain settings sent.':'Native processor disabled.';}
   function bridgeState(){if(!request)return 'Checking native library…';if(Number(readNative('MicFXNativeAck'))!==request)return 'Waiting for native response…';if(Number(readNative('MicFXNativeVersion'))!==4)return 'Native library version mismatch; rebuild v4.';if(Number(readNative('MicFXNativeHooked'))!==1)return 'Native hook unavailable: '+nativeStatus();if(!cfg.pitchEnabled)return 'MicFX disabled';if(Number(readNative('MicFXNativeOn'))!==1)return 'Native processor not enabled';return /buffers processed/.test(nativeStatus())?'MicFX enabled · processing audio':'MicFX enabled · waiting for microphone';}
   function toast(t){try{vendetta.ui?.toasts?.showToast?.(t);}catch(_){}}
   function checkStartup(){const id=++startupRun;let attempts=0;clearTimeout(startupTimer);startupState='Checking native processor…';notify();const tick=()=>{if(!live||id!==startupRun)return;const t=bridgeState();if(t.startsWith('MicFX enabled')||t==='MicFX disabled'||t.startsWith('Native hook unavailable')||t.startsWith('Native library version mismatch')||++attempts>=24){startupState=t==='Waiting for native response…'?'MicFX: no native acknowledgment. Check v4 dylib.':t;notify();if(cfg.startupNotice)toast(startupState);return;}startupTimer=setTimeout(tick,250);};startupTimer=setTimeout(tick,250);}
@@ -223,7 +233,7 @@
   function installChat(){chatHooks=chatSeen=0;const after=vendetta.patcher?.after;if(typeof after!=='function')return;const attach=(o,k)=>{if(typeof o?.[k]!=='function')return;try{const off=after(k,o,(args,out)=>{if(!live||!out||!typeNames(args[0]).includes('ChatInputRightActions'))return;chatSeen++;return React.createElement(ChatActions,{original:out,key:out.key??undefined});});if(typeof off==='function'){offs.push(off);chatHooks++;}}catch(_){}};attach(React,'createElement');const rt=lookup('jsx','jsxs');for(const k of ['jsx','jsxs','jsxDEV'])attach(rt,k);}
 
   function TouchRail({value,min,max,disabled,onChange,preview}){const h=React.createElement,w=React.useRef(0),[drag,setDrag]=React.useState(null),current=React.useRef(null);const pick=e=>{const x=e?.nativeEvent?.locationX;if(!Number.isFinite(x)||!w.current)return null;return clamp(Math.round(min+clamp(x/w.current,0,1)*(max-min)),min,max);};const move=e=>{const n=pick(e);if(n!==null){current.current=n;setDrag(n);}};const end=e=>{const n=pick(e)??current.current;setDrag(null);current.current=null;if(n!==null&&n!==value&&!disabled)onChange(n);};const f=clamp(((drag??value)-min)/(max-min),0,1);return h(RN.View,{accessible:true,accessibilityRole:'adjustable',accessibilityValue:{min,max,now:value},accessibilityActions:[{name:'increment'},{name:'decrement'}],onAccessibilityAction:e=>{if(!disabled)onChange(clamp(value+(e.nativeEvent.actionName==='increment'?1:-1),min,max));},onLayout:e=>{w.current=e.nativeEvent.layout.width;},onStartShouldSetResponder:()=>!disabled,onMoveShouldSetResponder:()=>!disabled,onResponderGrant:move,onResponderMove:move,onResponderRelease:end,onResponderTerminate:()=>{current.current=null;setDrag(null);},style:{height:34,justifyContent:'center',opacity:disabled?.45:1}},h(RN.View,{pointerEvents:'none',style:{height:5,backgroundColor:'#454850',borderRadius:5}},h(RN.View,{style:{position:'absolute',left:0,width:(100*f)+'%',height:5,backgroundColor:preview?'#777b89':'#818cf8',borderRadius:5}}),h(RN.View,{style:{position:'absolute',left:(100*f)+'%',marginLeft:-7,top:-5,width:15,height:15,borderRadius:8,backgroundColor:'#d5d8ff'}})),drag!==null?h(RN.Text,{pointerEvents:'none',style:{position:'absolute',right:0,top:-9,color:'#a3aaff',fontSize:11}},String(drag)):null);}
-  function Controls(){const h=React.createElement;const update=useRefresh(),[busyUI,setBusyUI]=React.useState(false),[showProbe,setShowProbe]=React.useState(false),[presetName,setPresetName]=React.useState(''),[presetNotice,setPresetNotice]=React.useState('');React.useEffect(()=>{const t=setInterval(update,500);return ()=>clearInterval(t);},[]);
+  function Controls(){const h=React.createElement;const update=useRefresh(),[busyUI,setBusyUI]=React.useState(false),[showProbe,setShowProbe]=React.useState(false),[presetName,setPresetName]=React.useState(''),[presetNotice,setPresetNotice]=React.useState(''),[advancedInput,setAdvancedInput]=React.useState(String(cfg.advancedGainDb)),[advancedNotice,setAdvancedNotice]=React.useState('');React.useEffect(()=>{const t=setInterval(update,500);return ()=>clearInterval(t);},[]);
     const txt=(t,s={})=>h(RN.Text,{style:{color:'#e5e7eb',fontSize:15,...s}},t);
     const sub=t=>txt(t,{color:'#aeb4bf',fontSize:12,lineHeight:18,marginTop:5});
     const button=(t,fn,disabled=false)=>h(RN.TouchableOpacity,{accessibilityRole:'button',disabled,onPress:fn,style:{padding:12,borderRadius:9,backgroundColor:'#404249',opacity:disabled?.4:1,alignItems:'center'}},txt(t,{fontWeight:'600'}));
@@ -233,7 +243,63 @@
     const eqRow=(label,i)=>{const key='eq'+i,v=cfg[key];return h(RN.View,{key,style:{marginBottom:9}},h(RN.View,{style:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}},txt(label,{fontSize:13}),txt((v>0?'+':'')+v+' dB',{fontWeight:'700',color:'#a3aaff',fontSize:13})),h(RN.View,{style:{flexDirection:'row',alignItems:'center'}},button('−',()=>setConfig(key,clamp(v-1,-12,12)),busyUI||!cfg.eqEnabled||v<=-12),h(RN.View,{style:{flex:1,marginHorizontal:10}},h(TouchRail,{value:v,min:-12,max:12,disabled:busyUI||!cfg.eqEnabled,onChange:n=>setConfig(key,n)})),button('+',()=>setConfig(key,clamp(v+1,-12,12)),busyUI||!cfg.eqEnabled||v>=12)));};
     const toggle=(label,key,desc)=>h(RN.View,{style:{marginBottom:12}},h(RN.View,{style:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}},txt(label,{fontWeight:'600'}),h(RN.Switch,{value:cfg[key],disabled:busyUI,onValueChange:v=>{setConfig(key,v);}})),sub(desc));
     const run=async(reset=false)=>{if(busyUI||writing)return;setBusyUI(true);if(reset){Object.assign(cfg,{...defaults,autoEnable:false});save();}try{await applyControls();}finally{setBusyUI(false);update();}};
-    return h(RN.ScrollView,{style:{flex:1},contentContainerStyle:{padding:16,paddingBottom:50}},txt('MicFX',{fontSize:26,fontWeight:'bold'}),sub('v4.1 · Music bridge beta · settings saved automatically'),card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Automatically enable on launch','autoEnable','Restores your saved audio configuration and enables the processor each launch.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),sub('Chat hooks: '+chatHooks+' · composer renders: '+chatSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),card('Music bridge test',[toggle('Enable music bridge','musicEnabled','Restore this saved switch when Endcord launches. Requires compatible sender packets and an active microphone capture.'),toggle('Allow call audio mixing (experimental)','musicCallMix','When available, requests iOS Mix With Others for Discord voice sessions. May still interrupt Spotify; rejoin the call after changing.'),sub(String(readNative('MicFXCallMixStatus')||'Call audio mixing support not checked')),step('Music volume','musicVolume',0,100,'%',false),step('Microphone mix volume','micVolume',0,100,'%',false),sub(String(readNative('MicFXMusicStatus')||'Waiting for native library')),sub('Packets: '+(readNative('MicFXMusicPackets')||0)+' · Mixed buffers: '+(readNative('MicFXMusicMixed')||0))]),card('Input gain',[step('Microphone gain','gain',-12,12,' dB',true),sub('True digital gain. +12 dB is about 4× amplitude before limiting. Enable MicFX to apply it; Discord or iOS gain control can still reduce audible boost.')]),card('Pitchproof-style processor',[step('Pitch','pitch',-12,12,' st',true),step('Detune','detune',-100,100,' cents',true),step('Blend','blend',0,100,'%',false),sub(nativeStatus()),sub('Capture rate: '+(Number(readNative('MicFXNativeRate'))||'unknown')+' Hz')]),card('8-band microphone EQ',[toggle('Enable equalizer','eqEnabled','Native microphone equalizer, applied after pitch and before gain.'),eqPlot(),h(RN.View,{style:{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:12}},...Object.entries(eqPresets).map(([name,values])=>h(RN.View,{key:name},button(name,()=>setPreset(values),busyUI)))),...eqLabels.map(eqRow),sub('85 Hz and 8 kHz are shelves; other bands are bell filters. High bands outside the current capture bandwidth are skipped. Bass boosts may trigger the limiter.'),button('Reset EQ to flat',()=>setPreset(eqPresets.Flat),busyUI)]),card('Saved presets',[sub('Save and restore all pitch, EQ, gain, microphone, and Music Bridge settings. Built-in EQ presets remain available above.'),h(RN.TextInput,{value:presetName,onChangeText:setPresetName,placeholder:'Preset name',placeholderTextColor:'#999da8',maxLength:32,autoCapitalize:'words',style:{color:'#fff',backgroundColor:'#363940',borderRadius:9,padding:12,marginBottom:10}}),button('Save current settings',()=>{setPresetNotice(saveNamedPreset(presetName));},busyUI),presetNotice?sub(presetNotice):null,...Object.keys(savedPresets).sort((a,b)=>a.localeCompare(b)).map(name=>h(RN.View,{key:name,style:{marginTop:9,padding:9,borderRadius:9,backgroundColor:'#33363d'}},txt(name,{fontWeight:'600',marginBottom:6}),h(RN.View,{style:{flexDirection:'row',gap:8}},h(RN.View,{style:{flex:1}},button('Load',()=>{setPresetNotice(loadNamedPreset(name));},busyUI)),h(RN.View,{style:{flex:1}},button('Delete',()=>{setPresetNotice(deleteNamedPreset(name));},busyUI))))),sub(Object.keys(savedPresets).length+' / 20 saved presets')]),card('Stereo & width',[toggle('Request stereo encoding','stereo','Experimental: changes existing encoder channel fields only. Rejoin call and verify with another listener.'),step('Stereo widening','width',0,100,'%',false,true),sub('True widening requires PCM processing; mono capture may remain mono.')]),card('Original Discord processing',[toggle('Disable Discord filters','bypass','Requests noise suppression, noise cancellation, AGC and echo cancellation off. Prefer headphones to avoid echo.'),sub('Also requests system input processing bypass if exposed. Use headphones; some filters may remain active.')]),h(RN.View,{style:{marginTop:14}},button(busyUI?'Applying…':'Apply audio controls',()=>run(),busyUI)),h(RN.View,{style:{marginTop:8}},button('Reset / restore original settings',()=>run(true),busyUI)),card('Status',[txt(status,{fontSize:13,lineHeight:19}),sub('Transport hooks: '+stereoHooks+' · Encoder options observed: '+stereoSeen+' · Requests changed: '+stereoChanged),button('Refresh status',update,busyUI)]),h(RN.View,{style:{marginTop:12}},button(showProbe?'Hide diagnostics':'Show diagnostics',()=>setShowProbe(!showProbe))),showProbe?h(RN.View,{style:{height:650,marginTop:12}},h(Settings)):null);
+    return h(RN.ScrollView,{style:{flex:1},contentContainerStyle:{padding:16,paddingBottom:50}},txt('MicFX',{fontSize:26,fontWeight:'bold'}),sub('v4.2 · Music bridge beta · full v4 controls restored'),card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Automatically enable on launch','autoEnable','Restores your saved audio configuration and enables the processor each launch.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),sub('Chat hooks: '+chatHooks+' · composer renders: '+chatSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),
+    card('Saved presets',[
+      sub('Save your current pitch, EQ, gain, music bridge, and audio filter settings. Loading a preset applies it immediately. Maximum 20 presets.'),
+      h(RN.TextInput,{
+        value:presetName,
+        onChangeText:setPresetName,
+        placeholder:'Preset name',
+        placeholderTextColor:'#9ca3af',
+        maxLength:36,
+        autoCorrect:false,
+        style:{backgroundColor:'#181a20',color:'#fff',borderRadius:9,paddingHorizontal:12,paddingVertical:11,marginTop:10,marginBottom:8}
+      }),
+      button('Save / overwrite current settings',()=>{
+        const result=saveNamedPreset(presetName);setPresetNotice(result);
+      },busyUI),
+      presetNotice?sub(presetNotice):null,
+      ...savedPresets().map(item=>h(RN.View,{
+        key:item.name,
+        style:{marginTop:10,padding:10,borderRadius:9,backgroundColor:'#181a20',gap:8}
+      },
+        txt(item.name,{fontWeight:'600'}),
+        h(RN.View,{style:{flexDirection:'row',gap:8}},
+          h(RN.View,{style:{flex:1}},button('Load',()=>{setPresetNotice(loadNamedPreset(item.name));setAdvancedInput(String(cfg.advancedGainDb));},busyUI)),
+          h(RN.View,{style:{flex:1}},button('Delete',()=>setPresetNotice(deleteNamedPreset(item.name)),busyUI))
+        )
+      )),
+      !savedPresets().length?sub('No saved presets yet.'):null
+    ]),
+    card('Music bridge test',[toggle('Enable music bridge','musicEnabled','Mix Spotify Bridge audio into outgoing microphone. Your setting is remembered across launches.'),toggle('Allow other music during Discord calls','musicCallMix','Requests Mix With Others for eligible audio sessions; it cannot guarantee Spotify will keep playing in the background.'),
+      toggle('Pitch music too','musicPitchEnabled','Off (default): pitch and detune affect only your voice. On: apply the same voice pitch/detune to music independently. Requires MicFX processor enabled.'),
+      step('Music volume','musicVolume',0,100,'%',false),step('Microphone mix volume','micVolume',0,100,'%',false),sub(String(readNative('MicFXMusicStatus')||'Waiting for native library')),sub('Packets: '+(readNative('MicFXMusicPackets')||0)+' · Mixed buffers: '+(readNative('MicFXMusicMixed')||0)),
+      sub(String(readNative('MicFXCallMixStatus')||'Mix With Others state pending')),sub('Audio mixing hooks: '+(readNative('MicFXMixSessionHooks')||0)+' · Session updates: '+(readNative('MicFXMixSessionPatches')||0)+' · Apply failures: '+(readNative('MicFXMixSessionFailures')||0))]),card('Input gain',[step('Microphone gain','gain',-12,12,' dB',true),sub('Standard DSP gain: -12 to +12 dB. Advanced Gain overrides this slider when enabled. The microphone processor must be enabled.')]),
+    card('Advanced Gain',[
+      toggle('Enable advanced gain override','advancedGainEnabled','Apply the custom boost to your microphone instead of the regular slider. Saved across launches and in presets.'),
+      toggle('Apply advanced gain to music','musicAdvancedGainEnabled','Separately apply the same custom dB value to music before mixing. Works even when microphone advanced gain is off; peak limiting prevents digital overflow.'),
+      sub('Custom gain in dB. Values above +65 dB are accepted. For numerical safety, the input range is 0 to +240 dB.'),
+      h(RN.TextInput,{
+        value:advancedInput,
+        onChangeText:setAdvancedInput,
+        keyboardType:'decimal-pad',
+        placeholder:'Enter gain in dB (e.g. 72)',
+        placeholderTextColor:'#9ca3af',
+        maxLength:10,
+        style:{backgroundColor:'#181a20',color:'#fff',borderRadius:9,paddingHorizontal:12,paddingVertical:12,marginTop:10,marginBottom:8}
+      }),
+      button('Apply custom gain',()=>{
+        const input=advancedInput.trim();
+        const value=Number(input);
+        if(!input||!Number.isFinite(value)||value<0||value>240){setAdvancedNotice('Enter a number from 0 to 240 dB.');return;}
+        setConfig('advancedGainDb',Math.round(value*10)/10);
+        setAdvancedNotice('Advanced gain set to +'+(Math.round(value*10)/10)+' dB. Enable Advanced Gain and MicFX processing to use it.');
+      },busyUI),
+      sub('Requested gain: '+((cfg.advancedGainEnabled?cfg.advancedGainDb:cfg.gain)>0?'+':'')+(cfg.advancedGainEnabled?cfg.advancedGainDb:cfg.gain)+' dB'+(cfg.advancedGainEnabled?' (custom override)':' (standard)')),sub('Native microphone gain: '+(readNative('MicFXAppliedGainDb')??'not reported')+' dB (0 means processor disabled)'),
+      sub('Native music gain: '+(readNative('MicFXMusicAppliedGainDb')??'not reported')+' dB · Music pitch: '+(Number(readNative('MicFXMusicPitchOn'))===1?'On':'Off')),
+      sub('High gain amplifies background noise and can cause strong distortion. The native peak limiter keeps the resulting PCM within digital full scale; it does not increase microphone hardware output.'),
+      advancedNotice?sub(advancedNotice):null
+    ]),card('Pitchproof-style processor',[step('Pitch','pitch',-12,12,' st',true),step('Detune','detune',-100,100,' cents',true),step('Blend','blend',0,100,'%',false),sub(nativeStatus()),sub('Capture rate: '+(Number(readNative('MicFXNativeRate'))||'unknown')+' Hz')]),card('8-band microphone EQ',[toggle('Enable equalizer','eqEnabled','Native microphone equalizer, applied after pitch and before gain.'),eqPlot(),h(RN.View,{style:{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:12}},...Object.entries(eqPresets).map(([name,values])=>h(RN.View,{key:name},button(name,()=>setPreset(values),busyUI)))),...eqLabels.map(eqRow),sub('85 Hz and 8 kHz are shelves; other bands are bell filters. High bands outside the current capture bandwidth are skipped. Bass boosts may trigger the limiter.'),button('Reset EQ to flat',()=>setPreset(eqPresets.Flat),busyUI)]),card('Stereo & width',[toggle('Request stereo encoding','stereo','Experimental: changes existing encoder channel fields only. Rejoin call and verify with another listener.'),step('Stereo widening','width',0,100,'%',false,true),sub('True widening requires PCM processing; mono capture may remain mono.')]),card('Original Discord processing',[toggle('Disable Discord filters','bypass','Requests noise suppression, noise cancellation, AGC and echo cancellation off. Prefer headphones to avoid echo.'),sub('Also requests system input processing bypass if exposed. Use headphones; some filters may remain active.')]),h(RN.View,{style:{marginTop:14}},button(busyUI?'Applying…':'Apply audio controls',()=>run(),busyUI)),h(RN.View,{style:{marginTop:8}},button('Reset / restore original settings',()=>run(true),busyUI)),card('Status',[txt(status,{fontSize:13,lineHeight:19}),sub('Transport hooks: '+stereoHooks+' · Encoder options observed: '+stereoSeen+' · Requests changed: '+stereoChanged),button('Refresh status',update,busyUI)]),h(RN.View,{style:{marginTop:12}},button(showProbe?'Hide diagnostics':'Show diagnostics',()=>setShowProbe(!showProbe))),showProbe?h(RN.View,{style:{height:650,marginTop:12}},h(Settings)):null);
   }
-  return {settings:Controls,onLoad(){if(live)return;live=true;load();cfg.pitchEnabled=cfg.autoEnable;readPresets();save();installChat();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicStatus","MicFXMusicPackets","MicFXMusicMixed","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
+  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();cfg.pitchEnabled=cfg.autoEnable;save();installChat();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicStatus","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
 })()

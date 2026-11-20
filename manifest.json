@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.1",
-  "description": "Native microphone DSP and experimental Spotify Bridge with saved controls and custom presets. Requires matching v4.1 dylib.",
+  "name": "MicFX Voice Studio v4.2",
+  "description": "Restored v4 advanced microphone/music gain, independent music pitch, persistent Music Bridge, 20 named presets, and optional call-audio mixing. Requires matching v4.2 native dylib.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "a5da7a36c8edc33dccffa322321568e57e6edbab91a1b354af28dce16effe583",
+  "hash": "f981b45808f75193c57ac0e028bdb2096cc4826e3da756843d025e0e3693920a",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
