@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.3 repair test",
-  "description": "Diagnostic build: displays actual Spotify and Discord App Group paths, retains full MicFX controls. Requires matched native dylibs.",
+  "name": "MicFX Voice Studio v4.4 · Live Monitor test",
+  "description": "Keeps all v4 controls and working Spotify bridge, adds optional live processed microphone monitoring (off by default), local playback volume and RMS/peak meter. Requires matching v4.4 MicFX.dylib.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "cd08e83bc326972f7bbbb7a36b63e0d004f78feb90b89dbc7afb9bd74ffca0e3",
+  "hash": "4c77f2a66222a2978085c2b408e171b9dd211349c6fd0591b530d81412087cef",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
