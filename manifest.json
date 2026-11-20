@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.4 · Live Monitor test",
-  "description": "Keeps all v4 controls and working Spotify bridge, adds optional live processed microphone monitoring (off by default), local playback volume and RMS/peak meter. Requires matching v4.4 MicFX.dylib.",
+  "name": "MicFX Voice Studio v4.5",
+  "description": "Voice-only mute, fine mic gain and adjustable clean compression for the v4.4 MicFX native library.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "4c77f2a66222a2978085c2b408e171b9dd211349c6fd0591b530d81412087cef",
+  "hash": "83accb64f2b407952a118004172c2eaa75391662af5d18698a5ae0a1cbaff172",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
