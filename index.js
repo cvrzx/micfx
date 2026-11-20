@@ -115,15 +115,16 @@
       h(RN.Text,{selectable:true,style:{color:'#dbdee1',backgroundColor:'#202124',borderRadius:8,padding:12,marginTop:18,fontSize:12,fontFamily:'Menlo'}},text||'No scan yet. Join a call, then scan.'));
   }
   // Only numeric preferences and booleans are persisted; no audio or account data.
-  const defaults={micMuted:false,cleanAmp:false,cleanGainDb:6,cleanCompression:25,musicEnabled:false,musicCallMix:true,musicPitchEnabled:false,musicAdvancedGainEnabled:false,musicVolume:50,micVolume:100,gain:0,advancedGainEnabled:false,advancedGainDb:0,micDspEnabled:false,loudMicEnabled:false,loudMicAmount:75,voiceColor:0,monitorEnabled:false,monitorVolume:25,bypass:false,stereo:false,pitchEnabled:false,pitch:0,detune:0,blend:100,width:0,autoEnable:true,chatButton:false,voiceButton:true,startupNotice:true,eqEnabled:true,eq0:0,eq1:0,eq2:0,eq3:0,eq4:0,eq5:0,eq6:0,eq7:0};
-  const cfg={...defaults}, storage=vendetta.plugin?.storage, limits={cleanGainDb:[0,24],cleanCompression:[0,100],musicVolume:[0,100],micVolume:[0,100],gain:[-12,12],advancedGainDb:[0,240],loudMicAmount:[0,100],voiceColor:[0,100],monitorVolume:[0,100],pitch:[-12,12],detune:[-100,100],blend:[0,100],width:[0,100],...Object.fromEntries(Array.from({length:8},(_,i)=>["eq"+i,[-12,12]]))};
+  const defaults={"drumsEnabled":false,"drumsInput":0,"drumsOutput":0,"drumsProcess":0,"basiqEnabled":false,"basiqLow":0,"basiqMid":0,"basiqHigh":0,"basiqOutput":0,micMuted:false,cleanAmp:false,cleanGainDb:6,cleanCompression:25,musicEnabled:false,musicCallMix:true,musicPitchEnabled:false,musicAdvancedGainEnabled:false,musicVolume:50,micVolume:100,gain:0,advancedGainEnabled:false,advancedGainDb:0,micDspEnabled:false,loudMicEnabled:false,loudMicAmount:75,voiceColor:0,monitorEnabled:false,monitorVolume:25,bypass:false,stereo:false,pitchEnabled:false,pitch:0,detune:0,blend:100,width:0,autoEnable:true,chatButton:false,voiceButton:true,startupNotice:true,eqEnabled:true,eq0:0,eq1:0,eq2:0,eq3:0,eq4:0,eq5:0,eq6:0,eq7:0};
+  const cfg={...defaults}, storage=vendetta.plugin?.storage, limits={"drumsInput":[-30,30],"drumsOutput":[-30,30],"drumsProcess":[0,100],"basiqLow":[-15,15],"basiqMid":[-15,15],"basiqHigh":[-15,15],"basiqOutput":[-15,15],cleanGainDb:[0,24],cleanCompression:[0,100],musicVolume:[0,100],micVolume:[0,100],gain:[-12,12],advancedGainDb:[0,240],loudMicAmount:[0,100],voiceColor:[0,100],monitorVolume:[0,100],pitch:[-12,12],detune:[-100,100],blend:[0,100],width:[0,100],...Object.fromEntries(Array.from({length:8},(_,i)=>["eq"+i,[-12,12]]))};
   const eqLabels=["85 Hz · Bass shelf","150 Hz · Warmth","300 Hz · Body","600 Hz · Low mids","1.2 kHz · Mids","2.4 kHz · Presence","4.8 kHz · Clarity","8 kHz · Air shelf"];
   const eqPresets={Flat:[0,0,0,0,0,0,0,0],Deep:[5,4,1,-2,-1,0,0,0],Warm:[2,3,2,0,-1,0,0,-1],Clear:[-2,-2,-1,0,1,3,2,1]};
   const listeners=new Set(); let storageOK=!!storage;
   function notify(){for(const f of [...listeners]){try{f();}catch(_){}}}
   function save(){try{if(!storage)throw 0;storage.micfxConfig={...cfg};storageOK=true;}catch(_){storageOK=false;}notify();}
   function load(){try{const prior=storage?.micfxConfig;for(const k of Object.keys(defaults)){const v=prior?.[k];if(typeof defaults[k]==='boolean'){if(typeof v==='boolean')cfg[k]=v;}else if(typeof v==='number'&&Number.isFinite(v))cfg[k]=clamp(v,...limits[k]);}}catch(_){storageOK=false;}}
-  const presetKeys=['cleanAmp','cleanGainDb','cleanCompression','musicEnabled','musicCallMix','musicPitchEnabled','musicAdvancedGainEnabled','musicVolume','micVolume','pitchEnabled','gain','advancedGainEnabled','advancedGainDb','micDspEnabled','loudMicEnabled','loudMicAmount','voiceColor','voiceButton','pitch','detune','blend','eqEnabled','stereo','bypass','width',...Array.from({length:8},(_,i)=>'eq'+i)];
+  const effectKeys=["drumsEnabled", "drumsInput", "drumsOutput", "drumsProcess", "basiqEnabled", "basiqLow", "basiqMid", "basiqHigh", "basiqOutput"];
+  const presetKeys=[...effectKeys,'cleanAmp','cleanGainDb','cleanCompression','musicEnabled','musicCallMix','musicPitchEnabled','musicAdvancedGainEnabled','musicVolume','micVolume','pitchEnabled','gain','advancedGainEnabled','advancedGainDb','micDspEnabled','loudMicEnabled','loudMicAmount','voiceColor','voiceButton','pitch','detune','blend','eqEnabled','stereo','bypass','width',...Array.from({length:8},(_,i)=>'eq'+i)];
   function presetSnapshot(){return Object.fromEntries(presetKeys.map(k=>[k,cfg[k]]));}
   function migratePresets(){
     try{
@@ -166,7 +167,7 @@
     if(!item)return 'Preset not found.';
     for(const k of presetKeys){
       const isAmpSetting=k==='cleanAmp'||k==='cleanGainDb'||k==='cleanCompression';
-      const v=item.values[k]??(isAmpSetting?defaults[k]:undefined);
+      const v=item.values[k]??(isAmpSetting||effectKeys.includes(k)?defaults[k]:undefined);
       if(typeof defaults[k]==='boolean'){if(typeof v==='boolean')cfg[k]=v;}
       else if(typeof v==='number'&&Number.isFinite(v)&&limits[k])cfg[k]=clamp(v,...limits[k]);
     }
@@ -210,8 +211,8 @@
   const readNative=k=>{try{return RN.Settings?.get?.(k);}catch(_){return undefined;}};
   const nativeStatus=()=>readNative('MicFXPitchStatus')||'Native library not detected (or status not yet available).';
   let nativeWatch=null;let request=0, writing=false, startupTimer=null, startupRun=0, applyAgain=false, startupState='Not checked', chatHooks=0, chatSeen=0,voiceSeen=0;
-  function nativeDisable(){try{RN.Settings?.set?.({MicFXPitchEnabled:0,MicFXMicDspEnabled:0,MicFXLoudMicEnabled:0,MicFXMonitorEnabled:0,MicFXMusicEnabled:0,MicFXMusicCallMix:0});}catch(_){}}
-  function micProcessingOn(){return cfg.pitchEnabled||cfg.micDspEnabled||cfg.loudMicEnabled||cfg.cleanAmp;}
+  function nativeDisable(){try{RN.Settings?.set?.({MicFXDrumsEnabled:0,MicFXBasiqEnabled:0,MicFXPitchEnabled:0,MicFXMicDspEnabled:0,MicFXLoudMicEnabled:0,MicFXMonitorEnabled:0,MicFXMusicEnabled:0,MicFXMusicCallMix:0});}catch(_){}}
+  function micProcessingOn(){return cfg.pitchEnabled||cfg.micDspEnabled||cfg.loudMicEnabled||cfg.cleanAmp||cfg.drumsEnabled||cfg.basiqEnabled;}
   // The v4.4 library has separate 12 dB mic trim and one extended gain value shared with music.
   function cleanGainLimit(){return cfg.musicAdvancedGainEnabled?12:24;}
   function micGainDb(){
@@ -225,6 +226,10 @@
     const extendedMicGain=cfg.cleanAmp?gain>12:cfg.advancedGainEnabled;
     const muteWithoutMusic=cfg.micMuted&&!cfg.musicEnabled;
     RN.Settings.set({
+      MicFXDrumsEnabled:cfg.drumsEnabled?1:0,MicFXDrumsInput:cfg.drumsInput,
+      MicFXDrumsOutput:cfg.drumsOutput,MicFXDrumsProcess:cfg.drumsProcess,
+      MicFXBasiqEnabled:cfg.basiqEnabled?1:0,MicFXBasiqHigh:cfg.basiqHigh,
+      MicFXBasiqMid:cfg.basiqMid,MicFXBasiqLow:cfg.basiqLow,MicFXBasiqOutput:cfg.basiqOutput,
       MicFXPitchEnabled:cfg.pitchEnabled?1:0,MicFXPitchSemitones:cfg.pitch,
       MicFXPitchDetune:cfg.detune,MicFXPitchBlend:cfg.blend,
       MicFXPitchGain:cfg.cleanAmp?Math.min(gain,12):cfg.gain,
@@ -291,6 +296,66 @@
   });if(typeof off==='function'){offs.push(off);chatHooks++;}}catch(_){}};attach(React,'createElement');const rt=lookup('jsx','jsxs');for(const k of ['jsx','jsxs','jsxDEV'])attach(rt,k);}
 
   function TouchRail({value,min,max,disabled,onChange,preview,increment=1}){const h=React.createElement,w=React.useRef(0),[drag,setDrag]=React.useState(null),current=React.useRef(null);const pick=e=>{const x=e?.nativeEvent?.locationX;if(!Number.isFinite(x)||!w.current)return null;return clamp(min+Math.round(clamp(x/w.current,0,1)*(max-min)/increment)*increment,min,max);};const move=e=>{const n=pick(e);if(n!==null){current.current=n;setDrag(n);}};const end=e=>{const n=pick(e)??current.current;setDrag(null);current.current=null;if(n!==null&&n!==value&&!disabled)onChange(n);};const f=clamp(((drag??value)-min)/(max-min),0,1);return h(RN.View,{accessible:true,accessibilityRole:'adjustable',accessibilityValue:{min,max,now:value},accessibilityActions:[{name:'increment'},{name:'decrement'}],onAccessibilityAction:e=>{if(!disabled)onChange(clamp(value+(e.nativeEvent.actionName==='increment'?increment:-increment),min,max));},onLayout:e=>{w.current=e.nativeEvent.layout.width;},onStartShouldSetResponder:()=>!disabled,onMoveShouldSetResponder:()=>!disabled,onResponderGrant:move,onResponderMove:move,onResponderRelease:end,onResponderTerminate:()=>{current.current=null;setDrag(null);},style:{height:34,justifyContent:'center',opacity:disabled?.45:1}},h(RN.View,{pointerEvents:'none',style:{height:5,backgroundColor:'#454850',borderRadius:5}},h(RN.View,{style:{position:'absolute',left:0,width:(100*f)+'%',height:5,backgroundColor:preview?'#777b89':'#818cf8',borderRadius:5}}),h(RN.View,{style:{position:'absolute',left:(100*f)+'%',marginLeft:-7,top:-5,width:15,height:15,borderRadius:8,backgroundColor:'#d5d8ff'}})),drag!==null?h(RN.Text,{pointerEvents:'none',style:{position:'absolute',right:0,top:-9,color:'#a3aaff',fontSize:11}},String(drag)):null);}
+  function EffectPanel({drums}){
+    const h=React.createElement;
+    const naturalWidth=drums?751:170, naturalHeight=drums?268:550;
+    const [width,setWidth]=React.useState(0),[preview,setPreview]=React.useState(null);
+    const gesture=React.useRef(null);
+    const folder=readNative('MicFXPanelsPath');
+    if(typeof folder!=='string'||!folder.startsWith('/'))return null;
+    const scale=width/naturalWidth;
+    const sprite=(asset,x,y,w,height,frame,columns,rows)=>{
+      const left=(frame%columns)*w,top=Math.floor(frame/columns)*height;
+      return h(RN.View,{key:asset+'-'+x,pointerEvents:'none',style:{position:'absolute',left:x*scale,top:y*scale,width:w*scale,height:height*scale,overflow:'hidden'}},
+        h(RN.Image,{accessible:false,resizeMode:'stretch',source:{uri:'file://'+encodeURI(folder)+'/'+asset+'.png'},style:{position:'absolute',left:-left*scale,top:-top*scale,width:w*columns*scale,height:height*rows*scale}}));
+    };
+    const knobs=drums?[
+      ['Drums input','drumsInput','big',94,69,140,140,-30,30,.5],
+      ['Drums output','drumsOutput','little',320,90,107,107,-30,30,.5],
+      ['Process','drumsProcess','big',515,69,140,140,0,100,1]
+    ]:[
+      ['High','basiqHigh','high',19,26,130,125,-15,15,.5],
+      ['Mid','basiqMid','mid',19,163,130,131,-15,15,.5],
+      ['Low','basiqLow','low',19,311,130,142,-15,15,.5],
+      ['EQ output','basiqOutput','output',95,455,49,49,-15,15,.5]
+    ];
+    const enabledKey=drums?'drumsEnabled':'basiqEnabled',enabled=cfg[enabledKey];
+    const knobsUI=knobs.map(([label,key,asset,x,y,w,height,min,max,inc])=>{
+      const value=preview?.key===key?preview.value:cfg[key], unit=key==='drumsProcess'?'%':' dB';
+      const frame=clamp(Math.round(60*(value-min)/(max-min)),0,60);
+      const pick=e=>{
+        const g=gesture.current, py=e.nativeEvent.pageY;
+        if(!g||!Number.isFinite(py))return;
+        const steps=Math.round((g.startY-py)*(max-min)/(180*inc));
+        const v=clamp(g.startValue+steps*inc,min,max);
+        if(v!==g.value){g.value=v;setPreview({key,value:v});setConfig(key,v);}
+      };
+      const end=()=>{gesture.current=null;setPreview(null);};
+      return h(React.Fragment,{key},sprite(asset,x,y,w,height,frame,8,8),h(RN.View,{
+        accessible:true,accessibilityRole:'adjustable',accessibilityLabel:label,
+        accessibilityValue:{min,max,now:value,text:String(value)+unit},
+        accessibilityActions:[{name:'increment'},{name:'decrement'}],
+        onAccessibilityAction:e=>{const n=e.nativeEvent.actionName;if(n==='increment'||n==='decrement')setConfig(key,clamp(value+(n==='increment'?inc:-inc),min,max));},
+        style:{position:'absolute',left:x*scale,top:y*scale,width:w*scale,height:height*scale},
+        onStartShouldSetResponder:()=>true,onResponderTerminationRequest:()=>false,
+        onResponderGrant:e=>{gesture.current={startY:e.nativeEvent.pageY,startValue:value,value};setPreview({key,value});},
+        onResponderMove:pick,onResponderRelease:end,onResponderTerminate:end
+      }));
+    });
+    return h(RN.View,{style:{alignItems:'center',marginVertical:6}},h(RN.View,{
+      style:{width:'100%',maxWidth:drums?751:210,aspectRatio:naturalWidth/naturalHeight,overflow:'hidden',backgroundColor:drums?'#211f1c':'#aaa8a3'},
+      onLayout:e=>{const w=e.nativeEvent.layout.width;if(w>0&&w!==width)setWidth(w);}
+    },width>0?h(React.Fragment,null,
+      sprite(drums?'drumBg':'toneBg',0,0,naturalWidth,naturalHeight,0,1,1),...knobsUI,
+      drums?sprite('drumName',321,33,107,17,enabled?1:0,1,2):null,
+      drums?h(RN.TouchableOpacity,{accessibilityRole:'switch',accessibilityLabel:'Sweet Drums bypass',accessibilityState:{checked:!enabled},onPress:()=>setConfig(enabledKey,!enabled),style:{position:'absolute',left:294*scale,top:9*scale,width:158*scale,height:47*scale}}):null,
+      !drums?h(RN.Text,{numberOfLines:1,style:{position:'absolute',left:24*scale,top:2*scale,width:120*scale,textAlign:'center',fontSize:11*scale,color:'white'}},enabled?'MicFX':'Bypass'):null
+    ):null),
+      h(RN.Text,{style:{color:'#d6d9de',fontSize:12,textAlign:'center',marginTop:7}},knobs.map(([label,key])=>{
+        const v=preview?.key===key?preview.value:cfg[key];return label+' '+(key!=='drumsProcess'&&v>0?'+':'')+v+(key==='drumsProcess'?'%':' dB');}).join('   ·   '))
+    );
+  }
+
   function Controls(){const h=React.createElement;const update=useRefresh(),[busyUI,setBusyUI]=React.useState(false),[showProbe,setShowProbe]=React.useState(false),[presetName,setPresetName]=React.useState(''),[presetNotice,setPresetNotice]=React.useState(''),[advancedInput,setAdvancedInput]=React.useState(String(cfg.advancedGainDb)),[advancedNotice,setAdvancedNotice]=React.useState('');React.useEffect(()=>{const t=setInterval(update,cfg.monitorEnabled?120:500);return ()=>clearInterval(t);},[cfg.monitorEnabled]);
     const txt=(t,s={})=>h(RN.Text,{style:{color:'#e5e7eb',fontSize:15,...s}},t);
     const sub=t=>txt(t,{color:'#aeb4bf',fontSize:12,lineHeight:18,marginTop:5});
@@ -301,7 +366,7 @@
     const eqRow=(label,i)=>{const key='eq'+i,v=cfg[key];return h(RN.View,{key,style:{marginBottom:9}},h(RN.View,{style:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}},txt(label,{fontSize:13}),txt((v>0?'+':'')+v+' dB',{fontWeight:'700',color:'#a3aaff',fontSize:13})),h(RN.View,{style:{flexDirection:'row',alignItems:'center'}},button('−',()=>setConfig(key,clamp(v-1,-12,12)),busyUI||!cfg.eqEnabled||v<=-12),h(RN.View,{style:{flex:1,marginHorizontal:10}},h(TouchRail,{value:v,min:-12,max:12,disabled:busyUI||!cfg.eqEnabled,onChange:n=>setConfig(key,n)})),button('+',()=>setConfig(key,clamp(v+1,-12,12)),busyUI||!cfg.eqEnabled||v>=12)));};
     const toggle=(label,key,desc)=>h(RN.View,{style:{marginBottom:12}},h(RN.View,{style:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}},txt(label,{fontWeight:'600'}),h(RN.Switch,{value:cfg[key],disabled:busyUI,onValueChange:v=>{setConfig(key,v);}})),sub(desc));
     const run=async(reset=false)=>{if(busyUI||writing)return;setBusyUI(true);if(reset){Object.assign(cfg,{...defaults,autoEnable:false,micMuted:cfg.micMuted});save();}try{await applyControls();}finally{setBusyUI(false);update();}};
-    return h(RN.ScrollView,{style:{flex:1},contentContainerStyle:{padding:16,paddingBottom:50}},txt('MicFX',{fontSize:26,fontWeight:'bold'}),sub('v4.5 · MicFX voice controls'),
+    return h(RN.ScrollView,{style:{flex:1},contentContainerStyle:{padding:16,paddingBottom:50}},txt('MicFX',{fontSize:26,fontWeight:'bold'}),sub('v4.6 · MicFX voice controls'),
     card('Voice in call',[
       toggle('Mute my mic only','micMuted','Keep Discord’s own microphone unmuted to send Spotify to the call. Turn this switch off to restore your mic level.'),
       cfg.micMuted&&(Number(readNative('MicFXNativeHooked'))!==1||Number(readNative('MicFXNativeAck'))!==request)
@@ -310,6 +375,20 @@
       cfg.cleanAmp?step('Mic boost','cleanGainDb',0,cleanGainLimit(),' dB',true,false,0.5):null,
       cfg.cleanAmp?step('Compression','cleanCompression',0,100,'%',false):null,
       cfg.cleanAmp&&cfg.musicAdvancedGainEnabled?sub('Music uses the extended gain control. Mic boost is limited to +12 dB while advanced music gain is on.'):null
+    ]),
+    card('Sweet Drums',[
+      toggle('Enable Sweet Drums','drumsEnabled','Shapes your mic before the Spotify mix. Drag a knob up or down.'),
+      h(EffectPanel,{drums:true}),
+      cfg.drumsEnabled&&Number(readNative('MicFXDrumsAck'))!==request?sub('Waiting for the v4.6 mic processor.'):null,
+      !readNative('MicFXPanelsPath')?step('Drums input','drumsInput',-30,30,' dB',true,false,0.5):null,
+      !readNative('MicFXPanelsPath')?step('Drums output','drumsOutput',-30,30,' dB',true,false,0.5):null,
+      !readNative('MicFXPanelsPath')?step('Process','drumsProcess',0,100,'%',false):null
+    ]),
+    card('basiQ',[
+      toggle('Enable basiQ','basiqEnabled','Three-band tone EQ and output trim for your mic. Drag a knob up or down.'),
+      cfg.basiqEnabled?h(EffectPanel,{drums:false}):null,
+      cfg.basiqEnabled&&Number(readNative('MicFXBasiqAck'))!==request?sub('Waiting for the v4.6 mic processor.'):null,
+      ...(cfg.basiqEnabled&&!readNative('MicFXPanelsPath')?['High','Mid','Low','Output'].map(band=>step(band,'basiq'+band,-15,15,' dB',true,false,0.5)):[])
     ]),
     card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Automatically enable on launch','autoEnable','Restores your saved audio configuration and enables the processor each launch.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),toggle('Voice-call bar MicFX button','voiceButton','Opens the full MicFX controls while in a call when Discord exposes a supported voice-bar component.'),sub('UI hooks: '+chatHooks+' · chat renders: '+chatSeen+' · voice-bar renders: '+voiceSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),
     card('Saved presets',[

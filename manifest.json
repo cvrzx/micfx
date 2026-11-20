@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.5",
-  "description": "Voice-only mute, fine mic gain and adjustable clean compression for the v4.4 MicFX native library.",
+  "name": "MicFX Voice Studio v4.6",
+  "description": "Independent Sweet Drums and basiQ-style mic effects, voice mute and clean gain. Both new effects use MicFX v4.6 native audio.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "83accb64f2b407952a118004172c2eaa75391662af5d18698a5ae0a1cbaff172",
+  "hash": "7e4e7c5a17e372878ea013d80218de62c2e5d93a774696cdda5fe1221279b58e",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
