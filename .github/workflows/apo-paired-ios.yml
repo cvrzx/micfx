@@ -24,7 +24,7 @@ jobs:
       - name: Validate Mach-O arm64
         run: |
           file MicFX.dylib
-          xcrun lipo -verify_arch arm64 MicFX.dylib
+          xcrun lipo MicFX.dylib -verify_arch arm64
       - uses: actions/upload-artifact@v4
         with:
           name: Existing-MicFX-dylib-unsigned
@@ -60,7 +60,7 @@ jobs:
         run: |
           bash MicFXNative/build-ios.sh
           file dist/MicFXNative.dylib
-          xcrun lipo -verify_arch arm64 dist/MicFXNative.dylib
+          xcrun lipo dist/MicFXNative.dylib -verify_arch arm64
       - name: Install Qt macOS host tools
         if: steps.source.outputs.present == 'true'
         uses: jurplel/install-qt-action@v4
