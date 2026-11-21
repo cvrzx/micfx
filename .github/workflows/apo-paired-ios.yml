@@ -2,9 +2,9 @@ name: MicFX + Equalizer APO iOS (unsigned development builds)
 on:
   push:
     branches: [feature/apo-ios-github-actions]
-    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**']
+    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**', 'apo-ios/**']
   pull_request:
-    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**']
+    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**', 'apo-ios/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -119,3 +119,56 @@ jobs:
             build-input/MicFX_APO_Paired_Apps_v0.8/dist/MicFXAPOController-UNSIGNED.ipa
           if-no-files-found: error
 # No codesigning, Spotify capture claims, or Discord IPA injection in this workflow.
+
+  original-qt-controller:
+    name: Original APO Qt form controller (unsigned IPA)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch original Equalizer APO UI source
+        run: git clone --depth 1 https://github.com/mirror/equalizerapo.git original-equalizerapo
+      - name: Verify original Qt widgets are present
+        run: |
+          test -s original-equalizerapo/Editor/guis/PreampFilterGUI.ui
+          test -s original-equalizerapo/Editor/guis/BiQuadFilterGUI.ui
+      - name: Install desktop Qt for host tools
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: desktop
+          arch: clang_64
+          dir: '\${{ runner.temp }}/qt-macos'
+      - name: Remember Qt host kit
+        run: echo "QT_HOST_PREFIX=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+      - name: Install Qt iOS Widgets
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: ios
+          arch: ios
+          dir: '\${{ runner.temp }}/qt-ios'
+      - name: Configure original-UI iOS app
+        run: |
+          cmake -S apo-ios -B build/apo-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DQT_HOST_PATH="$QT_HOST_PREFIX" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+      - name: Compile iOS app (unsigned)
+        run: cmake --build build/apo-ios --config Release -- CODE_SIGNING_ALLOWED=NO
+      - name: Bundle unsigned IPA
+        shell: bash
+        run: |
+          app="$(find build/apo-ios -type d -name MicFXAPOController.app -print -quit)"
+          test -n "$app" || { echo 'No app bundle produced'; exit 1; }
+          mkdir -p output/Payload
+          ditto "$app" output/Payload/MicFXAPOController.app
+          (cd output && zip -qry ../MicFXAPOController-UNSIGNED.ipa Payload)
+          ls -lh MicFXAPOController-UNSIGNED.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Original-APO-Qt-iOS-Controller-UNSIGNED
+          path: MicFXAPOController-UNSIGNED.ipa
+          if-no-files-found: error
