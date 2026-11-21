@@ -2,6 +2,7 @@
 // Experimental iOS controller only; no Spotify capture or audio hook in this app.
 #import <Foundation/Foundation.h>
 #include <QApplication>
+#include <QIcon>
 #include <QWidget>
 #include <QMainWindow>
 #include <QStatusBar>
@@ -56,6 +57,7 @@ public:
     Controller() {
         apoWindow.setupUi(this); // Original upstream Equalizer APO MainWindow.ui
         setWindowTitle("Equalizer APO — MicFX");
+        setWindowIcon(QIcon(":/icons/accessories-text-editor.ico")); // Original APO Editor.rc icon
         resize(1024,768);
         auto *tabs=apoWindow.tabWidget;
         tabs->setTabsClosable(false);
