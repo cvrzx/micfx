@@ -6,6 +6,10 @@
 #include <QMainWindow>
 #include <QStatusBar>
 #include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QGraphicsProxyWidget>
+#include <QResizeEvent>
+#include <QShowEvent>
 #include <QPainterPath>
 #include <QPen>
 #include <QFileDialog>
@@ -231,9 +235,73 @@ public:
             status->setText(connected?"Settings saved to shared App Group (Discord hook untested).":"Saved locally only; App Group not authorized for this signing profile.");
     }
 };
+// Preserve the *original* APO Qt main window and its native controls.
+// Display it through a uniformly scaled QGraphicsProxyWidget so that
+// the desktop-width window, its original menu/tab/dock arrangement, and
+// every QDial shrink together instead of being clipped on a phone.
+//
+// No UI controls are redrawn or replaced. The scale is recomputed on
+// orientation/viewport changes, and input is delivered through the proxy.
+class FitAPOView final : public QGraphicsView {
+    QGraphicsProxyWidget* apoProxy = nullptr;
+
+    void updateScale() {
+        if (!apoProxy || viewport()->width() <= 1 || viewport()->height() <= 1)
+            return;
+        // Include the *actual* tab and dock minimum-size constraints,
+        // not a guessed 1024 px width.
+        const QRectF bounds = apoProxy->sceneBoundingRect();
+        if (bounds.width() < 1 || bounds.height() < 1)
+            return;
+        scene()->setSceneRect(bounds);
+        resetTransform();
+        fitInView(bounds, Qt::KeepAspectRatio);
+        centerOn(bounds.center());
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QGraphicsView::resizeEvent(event);
+        updateScale();
+    }
+
+    void showEvent(QShowEvent* event) override {
+        QGraphicsView::showEvent(event);
+        updateScale();
+    }
+
+public:
+    explicit FitAPOView(Controller* originalAPOWindow)
+        : QGraphicsView(nullptr) {
+        setWindowTitle("Equalizer APO");
+        setFrameShape(QFrame::NoFrame);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+        setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
+        setBackgroundBrush(QPalette().window());
+
+        auto* graphicsScene = new QGraphicsScene(this);
+        setScene(graphicsScene);
+        // Original QWidget/QMainWindow remains the actual GUI tree.
+        // QGraphicsProxyWidget performs only a visual/input transform.
+        apoProxy = graphicsScene->addWidget(originalAPOWindow);
+        originalAPOWindow->adjustSize();
+        const QSize minimum = originalAPOWindow->minimumSizeHint();
+        originalAPOWindow->resize(
+            std::max(1024, minimum.width()),
+            std::max(768, minimum.height()));
+        updateScale();
+    }
+};
+
 int main(int argc,char**argv){
     QApplication app(argc,argv);
-    Controller controller;
-    controller.show();
+    // Owned by the QGraphicsProxyWidget. Do not stack-allocate it:
+    // the scene destroys its embedded QWidget.
+    auto* originalAPOWindow = new Controller();
+    FitAPOView fittedWindow(originalAPOWindow);
+    fittedWindow.showMaximized();
     return app.exec();
 }
