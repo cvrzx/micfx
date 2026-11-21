@@ -199,7 +199,8 @@ public:
         if(!filters.isEmpty()){
             auto filter=filters.first().toObject();
             QStringList types={"PK","LPQ","HPQ","BP","LS","HS","NO","AP"};
-            biquad.typeComboBox->setCurrentIndex(std::max(0,types.indexOf(filter.value("type").toString("PK"))));
+            const auto typeIndex=types.indexOf(filter.value("type").toString("PK"));
+            biquad.typeComboBox->setCurrentIndex(typeIndex<0?0:int(typeIndex));
             biquad.freqSpinBox->setValue(filter.value("freqHz").toDouble(1000));
             biquad.gainSpinBox->setValue(filter.value("gainDb").toDouble());
             biquad.qSpinBox->setValue(filter.value("q").toDouble(1));
