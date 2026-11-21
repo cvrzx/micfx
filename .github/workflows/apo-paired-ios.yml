@@ -137,7 +137,7 @@ jobs:
           version: '6.8.3'
           target: desktop
           arch: clang_64
-          dir: '\${{ runner.temp }}/qt-macos'
+          dir: '${{ runner.temp }}/qt-macos'
       - name: Remember Qt host kit
         run: echo "QT_HOST_PREFIX=$QT_ROOT_DIR" >> "$GITHUB_ENV"
       - name: Install Qt iOS Widgets
@@ -146,7 +146,7 @@ jobs:
           version: '6.8.3'
           target: ios
           arch: ios
-          dir: '\${{ runner.temp }}/qt-ios'
+          dir: '${{ runner.temp }}/qt-ios'
       - name: Configure original-UI iOS app
         run: |
           cmake -S apo-ios -B build/apo-ios -G Xcode \
