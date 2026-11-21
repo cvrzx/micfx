@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.7+ · APO v5 compatible",
-  "description": "All original 4.7 controls preserved, plus +35 dB clean-gain UI and optional APO v5 bridge diagnostics. MP3 recording and music-inclusive recording require matching native support; current v4.7 recorder exports MP4/AAC.",
+  "name": "MicFX Voice Studio v4.7+ · Original UI",
+  "description": "Original MicFX 4.7 Sweet Drums, basiQ, EQ, pitch, monitor, recorder, presets, and VC button retained. Optional MP3 plus received music recording with updated native processor; up to +35 dB clean mic boost.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "874a1f026717c8e3180caa97916fb64635333ded562d627304780387115fdc5e",
+  "hash": "e89903a1ca946927181ee29a8a29ac7120b25787ed40784f21ff43b5405b5cdd",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
