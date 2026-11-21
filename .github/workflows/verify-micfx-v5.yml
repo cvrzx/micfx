@@ -1,0 +1,28 @@
+name: Verify MicFX v5 plugin
+on:
+  push:
+    branches: [feature/micfx-apo-v5-plugin]
+    paths: ['index.js', 'manifest.json', '.github/workflows/verify-micfx-v5.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate JavaScript
+        run: node --check index.js
+      - name: Validate plugin manifest
+        run: |
+          node -e "const m=require('./manifest.json');if(m.main!=='index.js'||!/^MicFX Voice Studio v5/.test(m.name))process.exit(1)"
+          wanted="$(node -p "require('./manifest.json').hash")"
+          actual="$(sha1sum index.js | cut -d' ' -f1)"
+          echo "Index SHA-1: $actual"
+          echo "Manifest:    $wanted"
+          test "$wanted" = "$actual"
+      - name: Verify native integration documentation
+        run: |
+          grep -q "MicFXAPOSettingsApplied" index.js
+          grep -q "MicFXAPOStereoPackets" index.js
+          grep -q "Equalizer APO v5" index.js
