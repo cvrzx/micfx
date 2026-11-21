@@ -1,0 +1,197 @@
+name: MicFX + Equalizer APO iOS (unsigned development builds)
+on:
+  push:
+    branches: [feature/apo-ios-github-actions]
+    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**']
+  pull_request:
+    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: micfx-apo-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-bridge-existing:
+    name: Existing native bridge dylib
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: cvrzx/music-bridge
+          ref: main
+      - name: Validate JavaScript
+        run: node --check plugin/index.js
+      - name: Compile existing native dylib
+        run: bash native/build.sh
+      - name: Validate Mach-O arm64
+        run: |
+          file MicFX.dylib
+          xcrun lipo MicFX.dylib -verify_arch arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Existing-MicFX-dylib-unsigned
+          path: MicFX.dylib
+          if-no-files-found: error
+  paired-source:
+    name: Original Qt controller + paired native source
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check paired source archive
+        id: source
+        shell: bash
+        run: |
+          if [[ -f source/MicFX_APO_Paired_Apps_Source_v0.8.tar.xz ]]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo 'Source archive not yet uploaded. Add source/MicFX_APO_Paired_Apps_Source_v0.8.tar.xz to enable paired build.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Expand paired sources
+        if: steps.source.outputs.present == 'true'
+        run: |
+          mkdir -p build-input
+          tar -xJf source/MicFX_APO_Paired_Apps_Source_v0.8.tar.xz -C build-input
+          test -s build-input/MicFX_APO_Paired_Apps_v0.8/APOController/CMakeLists.txt
+      - name: Portable DSP and IPA patch tests
+        if: steps.source.outputs.present == 'true'
+        working-directory: build-input/MicFX_APO_Paired_Apps_v0.8
+        run: bash tools/run-tests.sh
+      - name: Compile native Discord audio dylib
+        if: steps.source.outputs.present == 'true'
+        working-directory: build-input/MicFX_APO_Paired_Apps_v0.8
+        run: |
+          bash MicFXNative/build-ios.sh
+          file dist/MicFXNative.dylib
+          xcrun lipo dist/MicFXNative.dylib -verify_arch arm64
+      - name: Upload native paired dylib as soon as built
+        if: steps.source.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicFX-Paired-Native-UNSIGNED
+          path: build-input/MicFX_APO_Paired_Apps_v0.8/dist/MicFXNative.dylib
+          if-no-files-found: error
+      - name: Install Qt macOS host tools
+        if: steps.source.outputs.present == 'true'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: desktop
+          arch: clang_64
+          dir: qt-host
+      - name: Remember Qt host path
+        if: steps.source.outputs.present == 'true'
+        run: echo "QT_HOST_PREFIX=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+      - name: Install Qt Widgets for iOS
+        if: steps.source.outputs.present == 'true'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: ios
+          arch: ios
+          dir: qt-ios
+      - name: Fetch original Equalizer APO Qt sources
+        if: steps.source.outputs.present == 'true'
+        working-directory: build-input/MicFX_APO_Paired_Apps_v0.8
+        run: bash original/fetch-original-qt-source.sh
+      - name: Verify Qt frameworks (paired app)
+        if: steps.source.outputs.present == 'true'
+        run: |
+          test -f "$QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "$QT_HOST_PREFIX/lib/cmake/Qt6/Qt6Config.cmake"
+      - name: Configure Qt iOS controller
+        if: steps.source.outputs.present == 'true'
+        working-directory: build-input/MicFX_APO_Paired_Apps_v0.8
+        run: |
+          cmake -S APOController -B dist/qt-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DQT_HOST_PATH="$QT_HOST_PREFIX" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+      - name: Compile original-Qt controller
+        if: steps.source.outputs.present == 'true'
+        working-directory: build-input/MicFX_APO_Paired_Apps_v0.8
+        run: cmake --build dist/qt-ios --config Release -- CODE_SIGNING_ALLOWED=NO
+      - name: Package unsigned controller IPA
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        working-directory: build-input/MicFX_APO_Paired_Apps_v0.8
+        run: |
+          app="$(find dist/qt-ios -type d -name MicFXAPOController.app -print -quit)"
+          test -n "$app" || { echo 'Qt .app bundle not found'; exit 1; }
+          mkdir -p dist/ipa/Payload
+          ditto "$app" dist/ipa/Payload/MicFXAPOController.app
+          (cd dist/ipa && zip -qry ../MicFXAPOController-UNSIGNED.ipa Payload)
+      - name: Upload paired outputs
+        if: steps.source.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicFX-APO-Paired-UNSIGNED-iOS
+          path: |
+            build-input/MicFX_APO_Paired_Apps_v0.8/dist/MicFXNative.dylib
+            build-input/MicFX_APO_Paired_Apps_v0.8/dist/MicFXAPOController-UNSIGNED.ipa
+          if-no-files-found: error
+# No codesigning, Spotify capture claims, or Discord IPA injection in this workflow.
+
+  original-qt-controller:
+    name: Original APO Qt form controller (unsigned IPA)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch original Equalizer APO UI source
+        run: git clone --depth 1 https://github.com/mirror/equalizerapo.git original-equalizerapo
+      - name: Verify original Qt widgets are present
+        run: |
+          test -s original-equalizerapo/Editor/guis/PreampFilterGUI.ui
+          test -s original-equalizerapo/Editor/guis/BiQuadFilterGUI.ui
+      - name: Install desktop Qt for host tools
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: desktop
+          arch: clang_64
+          dir: qt-macos
+      - name: Remember Qt host kit
+        run: echo "QT_HOST_PREFIX=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+      - name: Install Qt iOS Widgets
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: ios
+          arch: ios
+          dir: qt-ios
+      - name: Verify Qt frameworks and host tools
+        run: |
+          echo "iOS Qt: $QT_ROOT_DIR"
+          echo "Host Qt: $QT_HOST_PREFIX"
+          test -f "$QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "$QT_HOST_PREFIX/lib/cmake/Qt6/Qt6Config.cmake"
+          ls "$QT_ROOT_DIR/lib/cmake/Qt6/"
+      - name: Configure original-UI iOS app
+        run: |
+          cmake -S apo-ios -B build/apo-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DQT_HOST_PATH="$QT_HOST_PREFIX" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+      - name: Compile iOS app (unsigned)
+        run: cmake --build build/apo-ios --config Release -- CODE_SIGNING_ALLOWED=NO
+      - name: Bundle unsigned IPA
+        shell: bash
+        run: |
+          app="$(find build/apo-ios -type d -name MicFXAPOController.app -print -quit)"
+          test -n "$app" || { echo 'No app bundle produced'; exit 1; }
+          mkdir -p output/Payload
+          ditto "$app" output/Payload/MicFXAPOController.app
+          (cd output && zip -qry ../MicFXAPOController-UNSIGNED.ipa Payload)
+          ls -lh MicFXAPOController-UNSIGNED.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Original-APO-Qt-iOS-Controller-UNSIGNED
+          path: MicFXAPOController-UNSIGNED.ipa
+          if-no-files-found: error
