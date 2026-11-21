@@ -115,7 +115,7 @@
       h(RN.Text,{selectable:true,style:{color:'#dbdee1',backgroundColor:'#202124',borderRadius:8,padding:12,marginTop:18,fontSize:12,fontFamily:'Menlo'}},text||'No scan yet. Join a call, then scan.'));
   }
   // Only numeric preferences and booleans are persisted; no audio or account data.
-  const defaults={"drumsEnabled":false,"drumsInput":0,"drumsOutput":0,"drumsProcess":0,"basiqEnabled":false,"basiqLow":0,"basiqMid":0,"basiqHigh":0,"basiqOutput":0,micMuted:false,cleanAmp:false,cleanGainDb:6,cleanCompression:25,musicEnabled:false,musicCallMix:true,musicPitchEnabled:false,musicAdvancedGainEnabled:false,musicVolume:50,micVolume:100,gain:0,advancedGainEnabled:false,advancedGainDb:0,micDspEnabled:false,loudMicEnabled:false,loudMicAmount:75,voiceColor:0,monitorEnabled:false,monitorVolume:25,bypass:false,stereo:false,pitchEnabled:false,pitch:0,detune:0,blend:100,width:0,autoEnable:true,chatButton:false,voiceButton:true,startupNotice:true,eqEnabled:true,eq0:0,eq1:0,eq2:0,eq3:0,eq4:0,eq5:0,eq6:0,eq7:0};
+  const defaults={"drumsEnabled":false,"drumsInput":0,"drumsOutput":0,"drumsProcess":0,"basiqEnabled":false,"basiqLow":0,"basiqMid":0,"basiqHigh":0,"basiqOutput":0,micMuted:false,recordMusic:false,recordMP3:false,cleanAmp:false,cleanGainDb:6,cleanCompression:25,musicEnabled:false,musicCallMix:true,musicPitchEnabled:false,musicAdvancedGainEnabled:false,musicVolume:50,micVolume:100,gain:0,advancedGainEnabled:false,advancedGainDb:0,micDspEnabled:false,loudMicEnabled:false,loudMicAmount:75,voiceColor:0,monitorEnabled:false,monitorVolume:25,bypass:false,stereo:false,pitchEnabled:false,pitch:0,detune:0,blend:100,width:0,autoEnable:true,chatButton:false,voiceButton:true,startupNotice:true,eqEnabled:true,eq0:0,eq1:0,eq2:0,eq3:0,eq4:0,eq5:0,eq6:0,eq7:0};
   const cfg={...defaults}, storage=vendetta.plugin?.storage, limits={"drumsInput":[-30,30],"drumsOutput":[-30,30],"drumsProcess":[0,100],"basiqLow":[-15,15],"basiqMid":[-15,15],"basiqHigh":[-15,15],"basiqOutput":[-15,15],cleanGainDb:[0,24],cleanCompression:[0,100],musicVolume:[0,100],micVolume:[0,100],gain:[-12,12],advancedGainDb:[0,240],loudMicAmount:[0,100],voiceColor:[0,100],monitorVolume:[0,100],pitch:[-12,12],detune:[-100,100],blend:[0,100],width:[0,100],...Object.fromEntries(Array.from({length:8},(_,i)=>["eq"+i,[-12,12]]))};
   const eqLabels=["85 Hz · Bass shelf","150 Hz · Warmth","300 Hz · Body","600 Hz · Low mids","1.2 kHz · Mids","2.4 kHz · Presence","4.8 kHz · Clarity","8 kHz · Air shelf"];
   const eqPresets={Flat:[0,0,0,0,0,0,0,0],Deep:[5,4,1,-2,-1,0,0,0],Warm:[2,3,2,0,-1,0,0,-1],Clear:[-2,-2,-1,0,1,3,2,1]};
@@ -124,7 +124,7 @@
   function save(){try{if(!storage)throw 0;storage.micfxConfig={...cfg};storageOK=true;}catch(_){storageOK=false;}notify();}
   function load(){try{const prior=storage?.micfxConfig;for(const k of Object.keys(defaults)){const v=prior?.[k];if(typeof defaults[k]==='boolean'){if(typeof v==='boolean')cfg[k]=v;}else if(typeof v==='number'&&Number.isFinite(v))cfg[k]=clamp(v,...limits[k]);}}catch(_){storageOK=false;}}
   const effectKeys=["drumsEnabled", "drumsInput", "drumsOutput", "drumsProcess", "basiqEnabled", "basiqLow", "basiqMid", "basiqHigh", "basiqOutput"];
-  const presetKeys=[...effectKeys,'cleanAmp','cleanGainDb','cleanCompression','musicEnabled','musicCallMix','musicPitchEnabled','musicAdvancedGainEnabled','musicVolume','micVolume','pitchEnabled','gain','advancedGainEnabled','advancedGainDb','micDspEnabled','loudMicEnabled','loudMicAmount','voiceColor','voiceButton','pitch','detune','blend','eqEnabled','stereo','bypass','width',...Array.from({length:8},(_,i)=>'eq'+i)];
+  const presetKeys=[...effectKeys,'recordMusic','recordMP3','cleanAmp','cleanGainDb','cleanCompression','musicEnabled','musicCallMix','musicPitchEnabled','musicAdvancedGainEnabled','musicVolume','micVolume','pitchEnabled','gain','advancedGainEnabled','advancedGainDb','micDspEnabled','loudMicEnabled','loudMicAmount','voiceColor','voiceButton','pitch','detune','blend','eqEnabled','stereo','bypass','width',...Array.from({length:8},(_,i)=>'eq'+i)];
   function presetSnapshot(){return Object.fromEntries(presetKeys.map(k=>[k,cfg[k]]));}
   function migratePresets(){
     try{
@@ -218,13 +218,13 @@
     const previous=Number(readNative('MicFXRecordCommand')?.id)||0;
     lastRecordCommand=Math.max(Date.now(),lastRecordCommand+1,previous+1);
     try{
-      RN.Settings.set({MicFXRecordCommand:{session,id:lastRecordCommand,action,file:file||''}});
+      RN.Settings.set({MicFXRecordCommand:{session,id:lastRecordCommand,action,file:file||'',format:cfg.recordMP3&&String(readNative('MicFXRecordFormats')||'').split(',').includes('mp3')?'mp3':'mp4',includeMusic:cfg.recordMusic&&Number(readNative('MicFXRecordMixCapable'))===1?1:0}});
     }catch(_){toast('Could not send the recorder command.');}
   }
   function nativeDisable(){try{RN.Settings?.set?.({MicFXDrumsEnabled:0,MicFXBasiqEnabled:0,MicFXPitchEnabled:0,MicFXMicDspEnabled:0,MicFXLoudMicEnabled:0,MicFXMonitorEnabled:0,MicFXMusicEnabled:0,MicFXMusicCallMix:0});}catch(_){}}
   function micProcessingOn(){return cfg.pitchEnabled||cfg.micDspEnabled||cfg.loudMicEnabled||cfg.cleanAmp||cfg.drumsEnabled||cfg.basiqEnabled;}
   // The v4.4 library has separate 12 dB mic trim and one extended gain value shared with music.
-  function cleanGainLimit(){return cfg.musicAdvancedGainEnabled?12:24;}
+  function cleanGainLimit(){return cfg.musicAdvancedGainEnabled?12:35;}
   function micGainDb(){
     if(cfg.cleanAmp)return Math.min(cfg.cleanGainDb,cleanGainLimit());
     return cfg.advancedGainEnabled?cfg.advancedGainDb:cfg.gain;
@@ -262,7 +262,7 @@
     });
     return micProcessingOn()?'Native mic processing settings sent.':'Native mic processor disabled.';
   }
-  function bridgeState(){if(!request)return 'Checking native library…';if(Number(readNative('MicFXNativeAck'))!==request)return 'Waiting for native response…';if(Number(readNative('MicFXNativeVersion'))!==4)return 'Native library version mismatch; rebuild v4.';if(Number(readNative('MicFXNativeHooked'))!==1)return 'Native hook unavailable: '+nativeStatus();if(!micProcessingOn())return 'MicFX disabled';if(Number(readNative('MicFXNativeOn'))!==1)return 'Native processor not enabled';return /buffers processed/.test(nativeStatus())?'MicFX enabled · processing audio':'MicFX enabled · waiting for microphone';}
+  function bridgeState(){if(!request)return 'Checking native library…';if(Number(readNative('MicFXNativeAck'))!==request)return 'Waiting for native response…';if(![4,5].includes(Number(readNative('MicFXNativeVersion'))))return 'Native processor not recognized (expected MicFX v4 or v5 bridge).';if(Number(readNative('MicFXNativeHooked'))!==1)return 'Native hook unavailable: '+nativeStatus();if(!micProcessingOn())return 'MicFX disabled';if(Number(readNative('MicFXNativeOn'))!==1)return 'Native processor not enabled';return /buffers processed/.test(nativeStatus())?'MicFX enabled · processing audio':'MicFX enabled · waiting for microphone';}
   function toast(t){try{vendetta.ui?.toasts?.showToast?.(t);}catch(_){}}
   function checkStartup(){const id=++startupRun;let attempts=0;clearTimeout(startupTimer);startupState='Checking native processor…';notify();const tick=()=>{if(!live||id!==startupRun)return;const t=bridgeState();if(t.startsWith('MicFX enabled')||t==='MicFX disabled'||t.startsWith('Native hook unavailable')||t.startsWith('Native library version mismatch')||++attempts>=24){startupState=t==='Waiting for native response…'?'MicFX: no native acknowledgment. Check v4 dylib.':t;notify();if(cfg.startupNotice)toast(startupState);return;}startupTimer=setTimeout(tick,250);};startupTimer=setTimeout(tick,250);}
   function nativeChange(){if(!live)return;try{applyNative();}catch(_){status='Native settings write failed.';}notify();}
@@ -376,13 +376,15 @@
     const eqRow=(label,i)=>{const key='eq'+i,v=cfg[key];return h(RN.View,{key,style:{marginBottom:9}},h(RN.View,{style:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}},txt(label,{fontSize:13}),txt((v>0?'+':'')+v+' dB',{fontWeight:'700',color:'#a3aaff',fontSize:13})),h(RN.View,{style:{flexDirection:'row',alignItems:'center'}},button('−',()=>setConfig(key,clamp(v-1,-12,12)),busyUI||!cfg.eqEnabled||v<=-12),h(RN.View,{style:{flex:1,marginHorizontal:10}},h(TouchRail,{value:v,min:-12,max:12,disabled:busyUI||!cfg.eqEnabled,onChange:n=>setConfig(key,n)})),button('+',()=>setConfig(key,clamp(v+1,-12,12)),busyUI||!cfg.eqEnabled||v>=12)));};
     const toggle=(label,key,desc)=>h(RN.View,{style:{marginBottom:12}},h(RN.View,{style:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}},txt(label,{fontWeight:'600'}),h(RN.Switch,{value:cfg[key],disabled:busyUI,onValueChange:v=>{setConfig(key,v);}})),sub(desc));
     const run=async(reset=false)=>{if(busyUI||writing)return;setBusyUI(true);if(reset){Object.assign(cfg,{...defaults,autoEnable:false,micMuted:cfg.micMuted});save();}try{await applyControls();}finally{setBusyUI(false);update();}};
-    return h(RN.ScrollView,{style:{flex:1},contentContainerStyle:{padding:16,paddingBottom:50}},txt('MicFX',{fontSize:26,fontWeight:'bold'}),sub('v4.7 · MicFX voice controls'),
+    return h(RN.ScrollView,{style:{flex:1},contentContainerStyle:{padding:16,paddingBottom:50}},txt('MicFX',{fontSize:26,fontWeight:'bold'}),sub('v4.7+ · Original 4.7 controls + optional APO v5 compatibility'),
     card('Voice in call',[
       toggle('Mute my mic only','micMuted','Keep Discord’s own microphone unmuted to send Spotify to the call. Turn this switch off to restore your mic level.'),
       cfg.micMuted&&(Number(readNative('MicFXNativeHooked'))!==1||Number(readNative('MicFXNativeAck'))!==request)
         ?sub('Waiting for MicFX. Voice mute is unconfirmed.'):null,
       toggle('Clean voice amp','cleanAmp','Boosts your voice with adjustable compression and no added saturation. Start at +6 dB.'),
       cfg.cleanAmp?step('Mic boost','cleanGainDb',0,cleanGainLimit(),' dB',true,false,0.5):null,
+       cfg.cleanAmp?h(RN.View,{style:{flexDirection:'row',flexWrap:'wrap',gap:6,marginBottom:8}},...[6,12,20,35].map(db=>button('+'+db+' dB',()=>setConfig('cleanGainDb',Math.min(db,cleanGainLimit())),busyUI))):null,
+       cfg.cleanAmp?sub('Native digital gain with peak limiting where supported. +35 dB is a large boost and can expose microphone noise; digital limiting cannot repair a mic that clips before processing.'):null,
       cfg.cleanAmp?step('Compression','cleanCompression',0,100,'%',false):null,
       cfg.cleanAmp&&cfg.musicAdvancedGainEnabled?sub('Music uses the extended gain control. Mic boost is limited to +12 dB while advanced music gain is on.'):null
     ]),
@@ -395,16 +397,23 @@
       const clips=readNative('MicFXRecordFiles');
       return card('Record processed mic',[
         sub('Record in a voice call, even with “Mute my mic only” on. Live monitoring pauses while recording or previewing.'),
-        button(taking?'Stop recording · '+elapsed:phase==='finishing'?'Finishing MP4…':'Start recording',
+        Number(readNative('MicFXRecordMixCapable'))===1?toggle('Include received music in recording','recordMusic','Record the processed mic + music already received by the native bridge. Does not independently capture Spotify audio.'):sub('Current dylib records only the processed mic before music is mixed. Music recording requires an upgraded native recorder and a working Spotify PCM sender.'),
+        String(readNative('MicFXRecordFormats')||'').split(',').includes('mp3')?toggle('Export recordings as MP3','recordMP3','Uses the native MP3 encoder when present.'):sub('MP3 encoding is not installed in this dylib; current recordings export as audio-only MP4/AAC.'),
+        button(taking?'Stop recording · '+elapsed:phase==='finishing'?'Finishing recording…':'Start recording',
           ()=>recordCommand(taking?'stop':'start'),!ready||(!taking&&!idle)),
         sub(ready?String(readNative('MicFXRecordStatus')||'Ready.'):'The recorder requires the v4.7 MicFX.dylib.'),
-        ...(Array.isArray(clips)?clips:[]).filter(name=>typeof name==='string'&&/^MicFX-.*\.mp4$/.test(name)).map(name=>
+        ...(Array.isArray(clips)?clips:[]).filter(name=>typeof name==='string'&&/^MicFX-.*\.(mp4|mp3)$/.test(name)).map(name=>
           h(RN.View,{key:name,style:{marginTop:12}},txt(name,{fontSize:13}),
             h(RN.View,{style:{flexDirection:'row',gap:8,marginTop:6}},
               button('Listen',()=>recordCommand('play',name),!idle||!ready),
-              button('Save MP4 to Files',()=>recordCommand('save',name),!idle||!ready))))
+              button('Save '+name.split('.').pop().toUpperCase()+' to Files',()=>recordCommand('save',name),!idle||!ready))))
       ]);
     })(),
+    Number(readNative('MicFXAPOVersion'))===5?card('APO v5 bridge status',[
+       sub('APO v5 add-on detected. This does not confirm that every legacy 4.7 native effect or the MP3 recorder exists in this dylib.'),
+       sub('Reader: '+String(readNative('MicFXAPOReadState')??'unknown')+' · Settings applied: '+String(readNative('MicFXAPOSettingsApplied')??0)+' · Stereo packets: '+String(readNative('MicFXAPOStereoPackets')??0)),
+       sub('Discord may still downmix to mono. Original 4.7 controls and presets are retained.')
+    ]):null,
     card('Sweet Drums',[
       toggle('Enable Sweet Drums','drumsEnabled','Shapes your mic before the Spotify mix. Drag a knob up or down.'),
       h(EffectPanel,{drums:true}),
@@ -497,5 +506,5 @@
       advancedNotice?sub(advancedNotice):null
     ]),card('Pitchproof-style processor',[step('Pitch','pitch',-12,12,' st',true),step('Detune','detune',-100,100,' cents',true),step('Blend','blend',0,100,'%',false),sub(nativeStatus()),sub('Capture rate: '+(Number(readNative('MicFXNativeRate'))||'unknown')+' Hz')]),card('8-band microphone EQ',[toggle('Enable equalizer','eqEnabled','Native microphone equalizer, applied after pitch and before gain.'),eqPlot(),h(RN.View,{style:{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:12}},...Object.entries(eqPresets).map(([name,values])=>h(RN.View,{key:name},button(name,()=>setPreset(values),busyUI)))),...eqLabels.map(eqRow),sub('85 Hz and 8 kHz are shelves; other bands are bell filters. High bands outside the current capture bandwidth are skipped. Bass boosts may trigger the limiter.'),button('Reset EQ to flat',()=>setPreset(eqPresets.Flat),busyUI)]),card('Stereo & width',[toggle('Request stereo encoding','stereo','Experimental: changes existing encoder channel fields only. Rejoin call and verify with another listener.'),step('Stereo widening','width',0,100,'%',false,true),sub('True widening requires PCM processing; mono capture may remain mono.')]),card('Original Discord processing',[toggle('Disable Discord filters','bypass','Requests noise suppression, noise cancellation, AGC and echo cancellation off. Prefer headphones to avoid echo.'),sub('Also requests system input processing bypass if exposed. Use headphones; some filters may remain active.')]),h(RN.View,{style:{marginTop:14}},button(busyUI?'Applying…':'Apply audio controls',()=>run(),busyUI)),h(RN.View,{style:{marginTop:8}},button('Reset / restore original settings',()=>run(true),busyUI)),card('Status',[txt(status,{fontSize:13,lineHeight:19}),sub('Transport hooks: '+stereoHooks+' · Encoder options observed: '+stereoSeen+' · Requests changed: '+stereoChanged),button('Refresh status',update,busyUI)]),h(RN.View,{style:{marginTop:12}},button(showProbe?'Hide diagnostics':'Show diagnostics',()=>setShowProbe(!showProbe))),showProbe?h(RN.View,{style:{height:650,marginTop:12}},h(Settings)):null);
   }
-  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();cfg.pitchEnabled=cfg.autoEnable;save();installChat();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicFiles","MicFXMusicInvalid","MicFXMusicStale","MicFXMusicPacketAgeMs","MicFXMusicReadState","MicFXMusicContainerPath","MicFXMusicStatus","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;recordCommand('stop');nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
+  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();cfg.pitchEnabled=cfg.autoEnable;save();installChat();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicFiles","MicFXMusicInvalid","MicFXMusicStale","MicFXMusicPacketAgeMs","MicFXMusicReadState","MicFXMusicContainerPath","MicFXMusicStatus","MicFXRecordState","MicFXRecordFiles","MicFXRecordSeconds","MicFXRecordStatus","MicFXRecordFormats","MicFXRecordMixCapable","MicFXAPOVersion","MicFXAPOReadState","MicFXAPOSettingsApplied","MicFXAPOStereoPackets","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;recordCommand('stop');nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
 })()
