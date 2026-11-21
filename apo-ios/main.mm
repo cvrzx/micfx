@@ -3,6 +3,13 @@
 #import <Foundation/Foundation.h>
 #include <QApplication>
 #include <QWidget>
+#include <QMainWindow>
+#include <QStatusBar>
+#include <QGraphicsScene>
+#include <QPainterPath>
+#include <QPen>
+#include <QFileDialog>
+#include <QStandardPaths>
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -20,8 +27,10 @@
 #include <QPushButton>
 #include <QStringList>
 #include <cmath>
+#include <algorithm>
 #include "ui_PreampFilterGUI.h"
 #include "ui_BiQuadFilterGUI.h"
+#include "ui_MainWindow.h"
 
 static QString groupDirectory() {
     @autoreleasepool {
@@ -29,7 +38,9 @@ static QString groupDirectory() {
         return url ? QString::fromUtf8(url.path.UTF8String) : QString();
     }
 }
-class Controller : public QWidget {
+class Controller : public QMainWindow {
+    Ui::MainWindow apoWindow;
+    QGraphicsScene* graph = nullptr;
     Ui::PreampFilterGUI micPre, musicPre;
     Ui::BiQuadFilterGUI biquad;
     QComboBox *route;
@@ -38,11 +49,17 @@ class Controller : public QWidget {
     bool initializing = true;
 public:
     Controller() {
+        apoWindow.setupUi(this); // Original upstream Equalizer APO MainWindow.ui
         setWindowTitle("Equalizer APO — MicFX");
-        resize(780,620);
-        auto *layout=new QVBoxLayout(this);
-        auto *tabs=new QTabWidget(this);
-        layout->addWidget(tabs);
+        resize(1024,768);
+        auto *tabs=apoWindow.tabWidget;
+        tabs->setTabsClosable(false);
+        graph=new QGraphicsScene(this);
+        apoWindow.graphicsView->setScene(graph);
+        apoWindow.actionToolbar->setChecked(true);
+        apoWindow.actionAnalysisPanel->setChecked(true);
+        connect(apoWindow.actionToolbar,&QAction::toggled,apoWindow.mainToolBar,&QWidget::setVisible);
+        connect(apoWindow.actionAnalysisPanel,&QAction::toggled,apoWindow.analysisDockWidget,&QWidget::setVisible);
         auto *micPage=new QWidget(this);
         auto *micLayout=new QVBoxLayout(micPage);
         auto *preWidget=new QWidget(micPage);
@@ -87,11 +104,18 @@ public:
         extraLayout->addStretch();
         tabs->addTab(extra,"MicFX · Microphone");
 
-        auto *saveButton=new QPushButton("Save settings for Discord",this);
-        layout->addWidget(saveButton);
+        auto *saveButton=new QPushButton("Apply & save settings",this);
+        apoWindow.mainToolBar->addWidget(saveButton);
         status=new QLabel(this);
         status->setWordWrap(true);
-        layout->addWidget(status);
+        statusBar()->addWidget(status,1);
+        connect(apoWindow.actionSave,&QAction::triggered,this,[this]{save();});
+        connect(apoWindow.actionNew,&QAction::triggered,this,[this]{
+            micPre.doubleSpinBox->setValue(0);musicPre.doubleSpinBox->setValue(0);
+            biquad.gainSpinBox->setValue(0);biquad.freqSpinBox->setValue(1000);
+            biquad.qSpinBox->setValue(1);muted->setChecked(false);enabled->setChecked(false);
+            route->setCurrentIndex(0);save();
+        });
         connectPreamp(micPre);
         connectPreamp(musicPre);
         connect(biquad.freqDial,&QDial::valueChanged,this,[this](int v){
@@ -121,8 +145,43 @@ public:
             QSignalBlocker b(ui.dial);ui.dial->setValue(std::lround(v/.1));save();
         });
     }
+    void updateGraph(){
+        if(!graph)return;
+        graph->clear();
+        constexpr int W=600,H=230;
+        graph->setSceneRect(0,0,W,H);
+        QPen gridPen(QColor(170,170,170,85),1);
+        for(int i=0;i<=6;i++)graph->addLine(0,i*H/6.,W,i*H/6.,gridPen);
+        for(int i=0;i<=10;i++)graph->addLine(i*W/10.,0,i*W/10.,H,gridPen);
+        // Peaking filter transfer function (RBJ Audio EQ Cookbook).
+        // Other original APO filter modes display a zero reference until
+        // their exact transfer functions are connected to this widget.
+        double fs=48000.,fc=std::clamp(biquad.freqSpinBox->value(),20.,20000.),
+          q=std::max(0.0001,biquad.qSpinBox->value()),gain=biquad.gainSpinBox->value();
+        auto response=[&](double f){
+            if(biquad.typeComboBox->currentIndex()!=0)return 0.;
+            double A=std::pow(10.,gain/40.),w0=2.*3.141592653589793*fc/fs;
+            double alpha=std::sin(w0)/(2.*q);
+            double b0=1+alpha*A,b1=-2*std::cos(w0),b2=1-alpha*A;
+            double a0=1+alpha/A,a1=-2*std::cos(w0),a2=1-alpha/A;
+            double w=2.*3.141592653589793*f/fs;
+            double nr=b0+b1*std::cos(w)+b2*std::cos(2*w),ni=-b1*std::sin(w)-b2*std::sin(2*w);
+            double dr=a0+a1*std::cos(w)+a2*std::cos(2*w),di=-a1*std::sin(w)-a2*std::sin(2*w);
+            return 10*std::log10(std::max(1e-20,(nr*nr+ni*ni)/(dr*dr+di*di)));
+        };
+        QPainterPath curve;
+        for(int x=0;x<W;x++){
+            double f=20.*std::pow(1000.,double(x)/(W-1));
+            double db=micPre.doubleSpinBox->value()+response(f);
+            double y=std::clamp(H*(.5-db/48.),0.,double(H));
+            if(x==0)curve.moveTo(x,y);else curve.lineTo(x,y);
+        }
+        graph->addPath(curve,QPen(QColor(40,40,40),2));
+        graph->addLine(0,H/2.,W,H/2.,QPen(QColor(90,90,90),1));
+    }
     void save(){
         if(initializing)return;
+        updateGraph();
         QString dir=groupDirectory();
         if(dir.isEmpty()){
             status->setText("App Group not authorized. Both signed apps need compatible entitlements.");
