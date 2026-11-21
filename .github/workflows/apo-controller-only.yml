@@ -22,6 +22,12 @@ jobs:
           git clone --depth 1 https://github.com/mirror/equalizerapo.git original-equalizerapo
           test -f original-equalizerapo/Editor/guis/PreampFilterGUI.ui
           test -f original-equalizerapo/Editor/guis/BiQuadFilterGUI.ui
+      - name: Package original Equalizer APO app icon
+        run: |
+          python3 apo-ios/scripts/prepare_original_icon.py \
+            original-equalizerapo/Editor/icons/accessories-text-editor.ico \
+            apo-ios/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
+          test -s apo-ios/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
       - name: Install Qt 6.8.3 macOS host tools
         id: qt-host
         uses: jurplel/install-qt-action@v4
