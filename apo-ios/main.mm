@@ -129,15 +129,15 @@ public:
             biquad.freqSpinBox->setValue(20.*std::pow(1000.,v/1000.));
         });
         connect(biquad.freqSpinBox,QOverload<double>::of(&QDoubleSpinBox::valueChanged),this,[this](double v){
-            if(v>0){QSignalBlocker b(biquad.freqDial);biquad.freqDial->setValue(std::lround(1000.*std::log(v/20.)/std::log(1000.)));}save();
+            if(v>0){QSignalBlocker b(biquad.freqDial);biquad.freqDial->setValue(static_cast<int>(std::lround(1000.*std::log(v/20.)/std::log(1000.))));}save();
         });
         connect(biquad.gainDial,&QDial::valueChanged,this,[this](int v){biquad.gainSpinBox->setValue(v*.1);});
         connect(biquad.gainSpinBox,QOverload<double>::of(&QDoubleSpinBox::valueChanged),this,[this](double v){
-            QSignalBlocker b(biquad.gainDial);biquad.gainDial->setValue(std::lround(v/.1));save();
+            QSignalBlocker b(biquad.gainDial);biquad.gainDial->setValue(static_cast<int>(std::lround(v/.1)));save();
         });
         connect(biquad.qDial,&QDial::valueChanged,this,[this](int v){biquad.qSpinBox->setValue(.3333*std::pow(100.,v/1000.));});
         connect(biquad.qSpinBox,QOverload<double>::of(&QDoubleSpinBox::valueChanged),this,[this](double v){
-            if(v>0){QSignalBlocker b(biquad.qDial);biquad.qDial->setValue(std::lround(1000.*std::log(v/.3333)/std::log(100.)));}save();
+            if(v>0){QSignalBlocker b(biquad.qDial);biquad.qDial->setValue(static_cast<int>(std::lround(1000.*std::log(v/.3333)/std::log(100.))));}save();
         });
         connect(biquad.typeComboBox,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int){save();});
         connect(enabled,&QCheckBox::toggled,this,[this](bool){save();});
@@ -150,7 +150,7 @@ public:
     void connectPreamp(Ui::PreampFilterGUI& ui){
         connect(ui.dial,&QDial::valueChanged,this,[this,&ui](int v){ui.doubleSpinBox->setValue(v*.1);});
         connect(ui.doubleSpinBox,QOverload<double>::of(&QDoubleSpinBox::valueChanged),this,[this,&ui](double v){
-            QSignalBlocker b(ui.dial);ui.dial->setValue(std::lround(v/.1));save();
+            QSignalBlocker b(ui.dial);ui.dial->setValue(static_cast<int>(std::lround(v/.1)));save();
         });
     }
     void updateGraph(){
@@ -274,7 +274,7 @@ protected:
 
 public:
     explicit FitAPOView(Controller* originalAPOWindow)
-        : QGraphicsView(nullptr) {
+        : QGraphicsView(static_cast<QWidget*>(nullptr)) {
         setWindowTitle("Equalizer APO");
         setFrameShape(QFrame::NoFrame);
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
