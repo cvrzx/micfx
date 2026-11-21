@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: apo-controller-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build-apo-ios:
     runs-on: macos-15-intel
