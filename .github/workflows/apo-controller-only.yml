@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get original Equalizer APO UI files
         run: |
           git clone --depth 1 https://github.com/mirror/equalizerapo.git original-equalizerapo
@@ -47,6 +47,7 @@ jobs:
           printf 'iOS Qt: %s\n' "$QT_IOS_PREFIX"
           test -f "$QT_HOST_PREFIX/lib/cmake/Qt6/Qt6Config.cmake"
           test -f "$QT_IOS_PREFIX/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "$QT_IOS_PREFIX/lib/cmake/Qt6/qt.toolchain.cmake"
           xcrun --sdk iphoneos --show-sdk-path
       - name: Configure APO Qt iOS
         env:
@@ -54,11 +55,11 @@ jobs:
           QT_IOS_PREFIX: ${{ steps.qt-ios.outputs.qt-root-dir }}
         run: |
           cmake -S apo-ios -B build/apo-ios -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
+            "-DCMAKE_TOOLCHAIN_FILE=$QT_IOS_PREFIX/lib/cmake/Qt6/qt.toolchain.cmake" \
+            "-DQT_HOST_PATH=$QT_HOST_PREFIX" \
+            "-DQt6_DIR=$QT_IOS_PREFIX/lib/cmake/Qt6" \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            "-DCMAKE_PREFIX_PATH=$QT_IOS_PREFIX" \
-            "-DQT_HOST_PATH=$QT_HOST_PREFIX" \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
       - name: Build Equalizer APO iOS controller
         run: cmake --build build/apo-ios --config Release -- CODE_SIGNING_ALLOWED=NO
