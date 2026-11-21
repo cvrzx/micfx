@@ -39,16 +39,17 @@ jobs:
         id: source
         shell: bash
         run: |
-          if [[ -f source/MicFX_APO_Paired_Apps_Source_v0.8.zip ]]; then
+          if [[ -f source/MicFX_APO_Paired_Apps_Source_v0.8.tar.xz ]]; then
             echo 'present=true' >> "$GITHUB_OUTPUT"
           else
             echo 'present=false' >> "$GITHUB_OUTPUT"
-            echo 'Source archive not yet uploaded. Add source/MicFX_APO_Paired_Apps_Source_v0.8.zip to enable paired build.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Source archive not yet uploaded. Add source/MicFX_APO_Paired_Apps_Source_v0.8.tar.xz to enable paired build.' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Expand paired sources
         if: steps.source.outputs.present == 'true'
         run: |
-          unzip -q source/MicFX_APO_Paired_Apps_Source_v0.8.zip -d build-input
+          mkdir -p build-input
+          tar -xJf source/MicFX_APO_Paired_Apps_Source_v0.8.tar.xz -C build-input
           test -s build-input/MicFX_APO_Paired_Apps_v0.8/APOController/CMakeLists.txt
       - name: Portable DSP and IPA patch tests
         if: steps.source.outputs.present == 'true'
