@@ -4,8 +4,9 @@ This workflow builds unsigned development artifacts using macOS + Xcode hosted b
 
 ## Current artifacts
 
+- **Original-APO-Qt-iOS-Controller-UNSIGNED**: builds the stand-alone controller directly from this branch's `apo-ios/` source and the original Equalizer APO `PreampFilterGUI.ui` and `BiQuadFilterGUI.ui` forms. It does not require the v0.8 source ZIP. This first controller is not the complete original Windows Configuration Editor, and is not yet validated on iPhone.
 - Existing MicFX dylib is built from `cvrzx/music-bridge` and uploaded as `Existing-MicFX-dylib-unsigned`.
-- The paired-app job is activated when the source archive `source/MicFX_APO_Paired_Apps_Source_v0.8.zip` exists in this branch. It builds experimental native source plus an iOS controller using **real Equalizer APO Qt Designer .ui files** from upstream. The full original Windows APO editor has not been ported.
+- The additional v0.8 paired-app job is activated when the source archive `source/MicFX_APO_Paired_Apps_Source_v0.8.zip` exists in this branch. It builds experimental native source plus an iOS controller using **real Equalizer APO Qt Designer .ui files** from upstream. The full original Windows APO editor has not been ported.
 - Download artifacts from **Actions → MicFX + Equalizer APO iOS → build run → Artifacts**.
 
 ## Upload the paired source archive
