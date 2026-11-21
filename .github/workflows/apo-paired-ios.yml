@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: micfx-apo-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   native-bridge-existing:
     name: Existing native bridge dylib
@@ -62,6 +65,13 @@ jobs:
           bash MicFXNative/build-ios.sh
           file dist/MicFXNative.dylib
           xcrun lipo dist/MicFXNative.dylib -verify_arch arm64
+      - name: Upload native paired dylib as soon as built
+        if: steps.source.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicFX-Paired-Native-UNSIGNED
+          path: build-input/MicFX_APO_Paired_Apps_v0.8/dist/MicFXNative.dylib
+          if-no-files-found: error
       - name: Install Qt macOS host tools
         if: steps.source.outputs.present == 'true'
         uses: jurplel/install-qt-action@v4
