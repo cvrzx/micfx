@@ -258,6 +258,7 @@
       MicFXMusicPitchEnabled:cfg.musicPitchEnabled?1:0,
       MicFXMusicAdvancedGainEnabled:cfg.musicAdvancedGainEnabled?1:0,
        MicFXMusicAdvancedGainDb:cfg.advancedGainDb,
+       MicFXIndependentMusicGainClient:1,
       MicFXMusicVolume:muteWithoutMusic?0:cfg.musicVolume,
       MicFXMicVolume:cfg.micMuted?0:cfg.micVolume,MicFXRequestID:request
     });
