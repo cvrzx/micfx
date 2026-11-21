@@ -22,6 +22,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
+#include <QFile>
 #include <QSignalBlocker>
 #include <QDir>
 #include <QPushButton>
@@ -137,6 +138,7 @@ public:
         connect(muted,&QCheckBox::toggled,this,[this](bool){save();});
         connect(route,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int){save();});
         connect(saveButton,&QPushButton::clicked,this,[this]{save();});
+        loadSettings();
         initializing=false;save();
     }
     void connectPreamp(Ui::PreampFilterGUI& ui){
@@ -179,14 +181,36 @@ public:
         graph->addPath(curve,QPen(QColor(40,40,40),2));
         graph->addLine(0,H/2.,W,H/2.,QPen(QColor(90,90,90),1));
     }
+    void loadSettings(){
+        QString dir=groupDirectory();
+        if(dir.isEmpty())dir=QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)+"/MicFX";
+        QFile f(dir+"/micfx-control-v1.json");
+        if(!f.open(QIODevice::ReadOnly))return;
+        auto root=QJsonDocument::fromJson(f.readAll()).object();
+        if(root.value("schema").toInt()!=1)return;
+        auto mic=root.value("mic").toObject(),music=root.value("music").toObject();
+        auto filters=root.value("eq").toObject().value("filters").toArray();
+        micPre.doubleSpinBox->setValue(mic.value("gainDb").toDouble());
+        musicPre.doubleSpinBox->setValue(music.value("gainDb").toDouble());
+        muted->setChecked(mic.value("mute").toBool());
+        enabled->setChecked(mic.value("enabled").toBool());
+        double left=mic.value("left").toDouble(1),right=mic.value("right").toDouble(1);
+        route->setCurrentIndex(left==0?2:(right==0?1:0));
+        if(!filters.isEmpty()){
+            auto filter=filters.first().toObject();
+            QStringList types={"PK","LPQ","HPQ","BP","LS","HS","NO","AP"};
+            biquad.typeComboBox->setCurrentIndex(std::max(0,types.indexOf(filter.value("type").toString("PK"))));
+            biquad.freqSpinBox->setValue(filter.value("freqHz").toDouble(1000));
+            biquad.gainSpinBox->setValue(filter.value("gainDb").toDouble());
+            biquad.qSpinBox->setValue(filter.value("q").toDouble(1));
+        }
+    }
     void save(){
         if(initializing)return;
         updateGraph();
-        QString dir=groupDirectory();
-        if(dir.isEmpty()){
-            status->setText("App Group not authorized. Both signed apps need compatible entitlements.");
-            return;
-        }
+        QString shared=groupDirectory();
+        bool connected=!shared.isEmpty();
+        QString dir=connected?shared:QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)+"/MicFX";
         QDir().mkpath(dir);
         double gain=micPre.doubleSpinBox->value(),musicGain=musicPre.doubleSpinBox->value();
         QStringList types={"PK","LPQ","HPQ","BP","LS","HS","NO","AP"};
@@ -203,7 +227,7 @@ public:
         if(!file.open(QIODevice::WriteOnly)||file.write(bytes)!=bytes.size()||!file.commit())
             status->setText("Failed to save settings into shared App Group.");
         else
-            status->setText("Saved shared settings. Discord native hook still needs device testing.");
+            status->setText(connected?"Settings saved to shared App Group (Discord hook untested).":"Saved locally only; App Group not authorized for this signing profile.");
     }
 };
 int main(int argc,char**argv){
