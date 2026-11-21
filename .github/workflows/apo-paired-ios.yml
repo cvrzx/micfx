@@ -2,9 +2,9 @@ name: MicFX + Equalizer APO iOS (unsigned development builds)
 on:
   push:
     branches: [feature/apo-ios-github-actions]
-    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**', 'apo-ios/**']
+    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**']
   pull_request:
-    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**', 'apo-ios/**']
+    paths: ['.github/workflows/apo-paired-ios.yml', 'source/**']
   workflow_dispatch:
 permissions:
   contents: read
