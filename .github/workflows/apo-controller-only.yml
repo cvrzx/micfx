@@ -1,0 +1,74 @@
+name: Build Equalizer APO iOS Controller
+on:
+  push:
+    branches: [feature/apo-ios-github-actions]
+    paths:
+      - 'apo-ios/**'
+      - '.github/workflows/apo-controller-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-apo-ios:
+    runs-on: macos-15-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get original Equalizer APO UI files
+        run: |
+          git clone --depth 1 https://github.com/mirror/equalizerapo.git original-equalizerapo
+          test -f original-equalizerapo/Editor/guis/PreampFilterGUI.ui
+          test -f original-equalizerapo/Editor/guis/BiQuadFilterGUI.ui
+      - name: Install Qt 6.8.3 macOS host tools
+        id: qt-host
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: desktop
+          arch: clang_64
+          dir: qt-setup
+      - name: Install Qt 6.8.3 iOS
+        id: qt-ios
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: ios
+          arch: ios
+          dir: qt-setup
+      - name: Confirm Qt installation
+        env:
+          QT_HOST_PREFIX: ${{ steps.qt-host.outputs.qt-root-dir }}
+          QT_IOS_PREFIX: ${{ steps.qt-ios.outputs.qt-root-dir }}
+        run: |
+          printf 'Host Qt: %s\n' "$QT_HOST_PREFIX"
+          printf 'iOS Qt: %s\n' "$QT_IOS_PREFIX"
+          test -f "$QT_HOST_PREFIX/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "$QT_IOS_PREFIX/lib/cmake/Qt6/Qt6Config.cmake"
+          xcrun --sdk iphoneos --show-sdk-path
+      - name: Configure APO Qt iOS
+        env:
+          QT_HOST_PREFIX: ${{ steps.qt-host.outputs.qt-root-dir }}
+          QT_IOS_PREFIX: ${{ steps.qt-ios.outputs.qt-root-dir }}
+        run: |
+          cmake -S apo-ios -B build/apo-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            "-DCMAKE_PREFIX_PATH=$QT_IOS_PREFIX" \
+            "-DQT_HOST_PATH=$QT_HOST_PREFIX" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+      - name: Build Equalizer APO iOS controller
+        run: cmake --build build/apo-ios --config Release -- CODE_SIGNING_ALLOWED=NO
+      - name: Package unsigned IPA
+        run: |
+          app="$(find build/apo-ios -type d -name MicFXAPOController.app -print -quit)"
+          test -n "$app"
+          mkdir -p out/Payload
+          ditto "$app" out/Payload/MicFXAPOController.app
+          (cd out && zip -qry ../EqualizerAPO-iOS-UNSIGNED.ipa Payload)
+          unzip -l EqualizerAPO-iOS-UNSIGNED.ipa | head -35
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EqualizerAPO-Qt-iOS-UNSIGNED
+          path: EqualizerAPO-iOS-UNSIGNED.ipa
+          if-no-files-found: error
