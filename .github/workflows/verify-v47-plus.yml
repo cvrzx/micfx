@@ -1,0 +1,29 @@
+name: Verify MicFX 4.7+ preservation
+on:
+  push:
+    branches:
+      - feature/micfx-4.7-v5-safe
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check plugin JavaScript syntax
+        run: node --check index.js
+      - name: Verify hash and preserved feature labels
+        run: |
+          node <<'NODE'
+          const fs = require('fs'),crypto=require('crypto'),cp=require('child_process');
+          const code=fs.readFileSync('index.js','utf8'),manifest=JSON.parse(fs.readFileSync('manifest.json','utf8'));
+          const hash=crypto.createHash('sha256').update(code).digest('hex');
+          if(manifest.hash!==hash)throw Error('Plugin hash mismatch');
+          const base=cp.execFileSync('git',['show','origin/v4.6-effects:index.js'],{encoding:'utf8'});
+          const labels=['Sweet Drums','basiQ','Record processed mic','Hear my processed microphone','Saved presets','Music bridge test','Voice-call bar MicFX button','Stereo & width','Pitchproof-style processor','8-band microphone EQ','Advanced Gain'];
+          for(const name of labels){if(!base.includes(name)||!code.includes(name))throw Error('Missing original feature: '+name);}
+          console.log('SHA-256 valid; all '+labels.length+' protected features retained.');
+          NODE
