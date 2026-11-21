@@ -416,6 +416,9 @@
         sub('Record in a voice call, even with “Mute my mic only” on. Live monitoring pauses while recording or previewing.'),
         Number(readNative('MicFXRecordMixCapable'))===1?toggle('Include received music in recording','recordMusic','Record the processed mic + music already received by the native bridge. Does not independently capture Spotify audio.'):sub('Current dylib records only the processed mic before music is mixed. Music recording requires an upgraded native recorder and a working Spotify PCM sender.'),
         String(readNative('MicFXRecordFormats')||'').split(',').includes('mp3')?toggle('Export recordings as MP3','recordMP3','Uses the native MP3 encoder when present.'):sub('MP3 encoding is not installed in this dylib; current recordings export as audio-only MP4/AAC.'),
+        cfg.recordMusic&&Number(readNative('MicFXRecordMixCapable'))===1?
+          sub((Number(readNative('MicFXMusicPackets'))||0)===0?'Music source not arriving: Spotify Bridge has sent no PCM packets yet. This recording can contain only microphone audio.':
+              (Number(readNative('MicFXMusicMixed'))||0)===0?'Spotify PCM packets are visible, but they have not been mixed into outgoing voice buffers yet. Join a supported voice call.':'Spotify audio packets have reached the outgoing mix. Record with music enabled to include that audio.'):null,
         button(taking?'Stop recording · '+elapsed:phase==='finishing'?'Finishing recording…':'Start recording',
           ()=>recordCommand(taking?'stop':'start'),!ready||(!taking&&!idle)),
         sub(ready?String(readNative('MicFXRecordStatus')||'Ready.'):'The recorder requires the v4.7 MicFX.dylib.'),
