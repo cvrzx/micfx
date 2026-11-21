@@ -12,6 +12,7 @@ if(NOT EXISTS "${APO_SOURCE}/Editor/guis/PreampFilterGUI.ui")
 endif()
 qt_add_executable(MicFXAPOController MANUAL_FINALIZATION MACOSX_BUNDLE
   main.mm
+  "${CMAKE_CURRENT_LIST_DIR}/Assets.xcassets"
   "${APO_SOURCE}/Editor/guis/PreampFilterGUI.ui"
   "${APO_SOURCE}/Editor/guis/BiQuadFilterGUI.ui"
   "${APO_SOURCE}/Editor/MainWindow.ui"
@@ -27,6 +28,7 @@ set_target_properties(MicFXAPOController PROPERTIES
   XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "16.0"
   XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_CURRENT_LIST_DIR}/APO.entitlements"
+  XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
   XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
 )
 target_include_directories(MicFXAPOController PRIVATE "${CMAKE_CURRENT_LIST_DIR}/compat" "${APO_SOURCE}/Editor/guis" "${APO_SOURCE}")
