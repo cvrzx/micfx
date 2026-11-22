@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.4 · Live Monitor test",
-  "description": "Keeps all v4 controls and working Spotify bridge, adds optional live processed microphone monitoring (off by default), local playback volume and RMS/peak meter. Requires matching v4.4 MicFX.dylib.",
+  "name": "MicFX Voice Studio v5 · Equalizer APO",
+  "description": "Preserves the existing MicFX UI and presets, adds native v5 Equalizer APO App Group status, mic EQ/mute and stereo-input diagnostics. Requires MicFX APO v5 Endcord IPA. True stereo Discord output, stock Spotify capture and MP3 recording are not implemented.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "72a58fa229e9d46a4b2e19821d15dc0eda4a2eac",
+  "hash": "7fe98d0340f4e554d449b4693244727357c992c3",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
