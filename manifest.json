@@ -1,13 +1,13 @@
 {
-  "name": "MicFX Voice Studio v4.7+ · Original UI",
-  "description": "Original MicFX 4.7 Sweet Drums, basiQ, EQ, pitch, monitor, recorder, presets, and VC button retained. Optional MP3 plus received music recording with updated native processor; up to +35 dB clean mic boost.",
+  "name": "MicFX Voice Studio v4.7 + Voicemod",
+  "description": "Original MicFX v4.7 UI/effects, +35 dB clean mic, MP3 recording, separate Spotify and Voicemod Soundboard bridges, saved OFF state after app restart; matching native libraries required.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "15ef9556e820cdb2a9de1925f1b016c97b28900bf28bc770414fb86a124bb204",
+  "hash": "f1306664ea932a00099e62bf3e82fe569026f8172cc5a9312b57f265ab8a5a8c",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
