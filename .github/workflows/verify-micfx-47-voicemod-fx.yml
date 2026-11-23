@@ -1,0 +1,16 @@
+name: Verify MicFX FX slot and incoming recording
+on:
+  push:
+    branches: [micfx-47-voicemod-fx]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JavaScript and source checksum
+        run: |
+          node --check index.js
+          node -e 'const fs=require("fs"),crypto=require("crypto");const js=fs.readFileSync("index.js","utf8"),m=JSON.parse(fs.readFileSync("manifest.json","utf8"));if(m.hash!==crypto.createHash("sha256").update(js).digest("hex"))throw Error("Manifest mismatch");for(const s of ["useControlsButtons.tsx","micfx-voice-settings","VoicePanelAnimatedButtonWrapper","recordRemote:true","recordOwnMic:false","Sweet Drums","basiQ","8-band microphone EQ","Saved presets","Voicemod soundboard bridge","Music bridge test","Hear my processed microphone"])if(!js.includes(s))throw Error("Missing "+s);'
