@@ -1,13 +1,13 @@
 {
   "name": "MicFX Voice Studio v4.7 + Voicemod",
-  "description": "Original MicFX v4.7 UI/effects, +35 dB clean mic, MP3 recording, separate Spotify and Voicemod Soundboard bridges, saved OFF state after app restart; matching native libraries required.",
+  "description": "Original MicFX controls, original call-row FX button injection, incoming call audio recorder (own mic off by default), Spotify and Voicemod bridge. Matching native test build required.",
   "authors": [
     {
       "name": "MicFX"
     }
   ],
   "main": "index.js",
-  "hash": "ec286e8c172639bbf86631f89f0503d3c55be881ce13e098618313aa98766115",
+  "hash": "b9ba63db7884ec9aa489624ce2edcb1a5b0ef421770b13d13bd2942e4adca623",
   "vendetta": {
     "icon": "MicrophoneIcon"
   }
