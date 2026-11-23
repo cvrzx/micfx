@@ -291,7 +291,7 @@
   // Voice bar UI is version-dependent. Only named voice-control components are
   // wrapped; unrelated screens are untouched. If Discord renames them, the
   // button simply won't appear rather than modifying arbitrary layout.
-  const vcNames=new Set(['VoicePanelVoiceControlsButtons','VoicePanelCardFloatingControls']);
+  const vcNames=new Set(['VoicePanelVoiceControlsButtons','VoicePanelCardFloatingControls','ChannelCallHeaderButtons','CallHeaderButtons']);
   function VCBarActions({original}){
     const h=React.createElement,[open,setOpen]=React.useState(false);
     const close=()=>setOpen(false);
