@@ -305,11 +305,72 @@
             h(RN.TouchableOpacity,{accessibilityRole:'button',accessibilityLabel:'Close MicFX controls',onPress:close,style:{padding:11,borderRadius:9,backgroundColor:'#35383f'}},h(RN.Text,{style:{color:'#fff',fontWeight:'600'}},'Close'))),
           h(RN.View,{style:{flex:1}},h(Controls)))));
   }
+  // Restore the original proven call-row slot injection instead of guessing React component names.
+  const voiceRowPath='modules/voice_panel/native/controls/useControlsButtons.tsx';
+  const voiceWrapperPath='modules/voice_panel/native/controls/buttons/VoicePanelAnimatedButtonWrapper.tsx';
+  const voiceIconPath='design/components/Icon/native/redesign/generated/MicrophoneIcon.tsx';
+  const voiceSlotKey='micfx-voice-settings';
+  let voiceSlotReady=false, voiceSlotTimer=null;
+  function addVoiceSlot(original,render){
+    if(!Array.isArray(original)||original.some(slot=>slot.key===voiceSlotKey))return original;
+    const leave=original.findIndex(slot=>slot.key==='connected-disconnect');
+    if(leave<0||!original.length||!original.every(slot=>Number.isFinite(slot.x)&&slot.width>0))return original;
+    const mic=original.findIndex(slot=>slot.key==='connected-mic'||slot.key==='connected-ptt');
+    const row=original.slice(), model=original[mic>=0?mic:leave];
+    row.splice(mic>=0?mic+1:leave,0,{...model,key:voiceSlotKey,type:'icon-normal',render});
+    const first=original[0],last=original[original.length-1],start=first.x-first.width/2;
+    const length=last.x+last.width/2-start;
+    if(!(length>0))return original;
+    const sum=row.reduce((n,slot)=>n+slot.width,0);
+    const gap=Math.min(12,Math.max(2,(length-sum)/(row.length-1)));
+    const scale=(length-gap*(row.length-1))/sum;
+    if(!(scale>0))return original;
+    let next=start;
+    return row.map(slot=>{const width=slot.width*scale,x=next+width/2;next+=width+gap;return {...slot,width,x};});
+  }
+  function installVoiceSlot(){
+    if(!live||voiceSlotReady)return;
+    try{
+      const byPath=globalThis.bunny?.metro?.findByFilePath||metro.findByFilePath;
+      const owner=globalThis.bunny?.metro?.findByFilePath?globalThis.bunny.metro:metro;
+      if(typeof byPath!=='function')throw Error('file path lookup not yet ready');
+      const mod=byPath.call(owner,voiceRowPath), Wrapper=byPath.call(owner,voiceWrapperPath)?.default;
+      const Icon=byPath.call(owner,voiceIconPath)?.MicrophoneIcon;
+      if(typeof mod?.default!=='function'||!Wrapper||!Icon)throw Error('voice row not ready');
+      const h=React.createElement, cache=new WeakMap();
+      function Shortcut({buttonProps}){
+        useRefresh();
+        const [open,setOpen]=React.useState(false), close=()=>setOpen(false);
+        if(!live||!cfg.voiceButton)return null;
+        return h(React.Fragment,null,
+          h(Wrapper,{props:buttonProps?.props,onPress:()=>setOpen(true),accessibilityLabel:'Open MicFX settings',
+            style:{alignItems:'center',justifyContent:'center',backgroundColor:'#353047',borderRadius:14}},
+            h(Icon,{size:22,color:'#ded8ff'}),
+            h(RN.Text,{allowFontScaling:false,style:{fontSize:8,lineHeight:9,color:'#ded8ff',fontWeight:'800'}},'FX')),
+          open&&h(RN.Modal,{visible:true,animationType:'slide',presentationStyle:'fullScreen',onRequestClose:close},
+            h(RN.SafeAreaView||RN.View,{style:{flex:1,backgroundColor:'#151519'}},
+              h(RN.View,{style:{padding:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}},
+                h(RN.Text,{style:{color:'#fff',fontWeight:'700',fontSize:20}},'MicFX'),
+                h(RN.Pressable,{accessibilityRole:'button',onPress:close,style:{padding:12}},
+                  h(RN.Text,{style:{color:'#ded8ff',fontWeight:'600'}},'Done'))),
+              h(RN.View,{style:{flex:1}},h(Controls)))));
+      }
+      const render=(key,props)=>h(Shortcut,{key,buttonProps:props});
+      const off=vendetta.patcher.after('default',mod,(_,original)=>{
+        if(!live||!cfg.voiceButton||!Array.isArray(original))return;
+        if(!cache.has(original))cache.set(original,addVoiceSlot(original,render));
+        const row=cache.get(original);if(row!==original){voiceSeen++;return row;}
+      });
+      if(typeof off!=='function')throw Error('voice slot hook unavailable');
+      offs.push(off);voiceSlotReady=true;chatHooks++;notify();
+    }catch(_){}
+    if(live&&!voiceSlotReady)voiceSlotTimer=setTimeout(installVoiceSlot,1000);
+  }
   function installChat(){chatHooks=chatSeen=voiceSeen=0;const after=vendetta.patcher?.after;if(typeof after!=='function')return;const attach=(o,k)=>{if(typeof o?.[k]!=='function')return;try{const off=after(k,o,(args,out)=>{
     if(!live||!out||!args?.[0])return;
     const names=typeNames(args[0]);
     if(cfg.chatButton&&names.includes('ChatInputRightActions')){chatSeen++;return React.createElement(ChatActions,{original:out,key:out.key??undefined});}
-    if(cfg.voiceButton&&names.some(n=>vcNames.has(n))){voiceSeen++;return React.createElement(VCBarActions,{original:out,key:out.key??undefined});}
+    if(cfg.voiceButton&&!voiceSlotReady&&names.some(n=>vcNames.has(n))){voiceSeen++;return React.createElement(VCBarActions,{original:out,key:out.key??undefined});}
   });if(typeof off==='function'){offs.push(off);chatHooks++;}}catch(_){}};attach(React,'createElement');const rt=lookup('jsx','jsxs');for(const k of ['jsx','jsxs','jsxDEV'])attach(rt,k);}
 
   function TouchRail({value,min,max,disabled,onChange,preview,increment=1}){const h=React.createElement,w=React.useRef(0),[drag,setDrag]=React.useState(null),current=React.useRef(null);const pick=e=>{const x=e?.nativeEvent?.locationX;if(!Number.isFinite(x)||!w.current)return null;return clamp(min+Math.round(clamp(x/w.current,0,1)*(max-min)/increment)*increment,min,max);};const move=e=>{const n=pick(e);if(n!==null){current.current=n;setDrag(n);}};const end=e=>{const n=pick(e)??current.current;setDrag(null);current.current=null;if(n!==null&&n!==value&&!disabled)onChange(n);};const f=clamp(((drag??value)-min)/(max-min),0,1);return h(RN.View,{accessible:true,accessibilityRole:'adjustable',accessibilityValue:{min,max,now:value},accessibilityActions:[{name:'increment'},{name:'decrement'}],onAccessibilityAction:e=>{if(!disabled)onChange(clamp(value+(e.nativeEvent.actionName==='increment'?increment:-increment),min,max));},onLayout:e=>{w.current=e.nativeEvent.layout.width;},onStartShouldSetResponder:()=>!disabled,onMoveShouldSetResponder:()=>!disabled,onResponderGrant:move,onResponderMove:move,onResponderRelease:end,onResponderTerminate:()=>{current.current=null;setDrag(null);},style:{height:34,justifyContent:'center',opacity:disabled?.45:1}},h(RN.View,{pointerEvents:'none',style:{height:5,backgroundColor:'#454850',borderRadius:5}},h(RN.View,{style:{position:'absolute',left:0,width:(100*f)+'%',height:5,backgroundColor:preview?'#777b89':'#818cf8',borderRadius:5}}),h(RN.View,{style:{position:'absolute',left:(100*f)+'%',marginLeft:-7,top:-5,width:15,height:15,borderRadius:8,backgroundColor:'#d5d8ff'}})),drag!==null?h(RN.Text,{pointerEvents:'none',style:{position:'absolute',right:0,top:-9,color:'#a3aaff',fontSize:11}},String(drag)):null);}
@@ -448,7 +509,7 @@
       cfg.basiqEnabled&&Number(readNative('MicFXBasiqAck'))!==request?sub('Waiting for the v4.6 mic processor.'):null,
       ...(cfg.basiqEnabled&&!readNative('MicFXPanelsPath')?['High','Mid','Low','Output'].map(band=>step(band,'basiq'+band,-15,15,' dB',true,false,0.5)):[])
     ]),
-    card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Remember MicFX enabled across launches','autoEnable','Turning MicFX off also disables auto-enable. On relaunch, the actual saved MicFX on/off state is respected.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),toggle('Voice-call bar MicFX button','voiceButton','Opens the full MicFX controls while in a call when Discord exposes a supported voice-bar component.'),sub('UI hooks: '+chatHooks+' · chat renders: '+chatSeen+' · voice-bar renders: '+voiceSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),
+    card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Remember MicFX enabled across launches','autoEnable','Turning MicFX off also disables auto-enable. On relaunch, the actual saved MicFX on/off state is respected.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),toggle('Voice-call bar MicFX button','voiceButton','Opens the full MicFX controls while in a call when Discord exposes a supported voice-bar component.'),sub('Voice slot: '+(voiceSlotReady?'Original row hook installed':'Waiting for original row hook')+' · UI hooks: '+chatHooks+' · chat renders: '+chatSeen+' · voice-bar renders: '+voiceSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),
     card('Saved presets',[
       sub('Save your current pitch, EQ, gain, music bridge, and audio filter settings. Loading a preset applies it immediately. Maximum 20 presets.'),
       h(RN.TextInput,{
@@ -534,5 +595,5 @@
       advancedNotice?sub(advancedNotice):null
     ]),card('Pitchproof-style processor',[step('Pitch','pitch',-12,12,' st',true),step('Detune','detune',-100,100,' cents',true),step('Blend','blend',0,100,'%',false),sub(nativeStatus()),sub('Capture rate: '+(Number(readNative('MicFXNativeRate'))||'unknown')+' Hz')]),card('8-band microphone EQ',[toggle('Enable equalizer','eqEnabled','Native microphone equalizer, applied after pitch and before gain.'),eqPlot(),h(RN.View,{style:{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:12}},...Object.entries(eqPresets).map(([name,values])=>h(RN.View,{key:name},button(name,()=>setPreset(values),busyUI)))),...eqLabels.map(eqRow),sub('85 Hz and 8 kHz are shelves; other bands are bell filters. High bands outside the current capture bandwidth are skipped. Bass boosts may trigger the limiter.'),button('Reset EQ to flat',()=>setPreset(eqPresets.Flat),busyUI)]),card('Stereo & width',[toggle('Request stereo encoding','stereo','Experimental: changes existing encoder channel fields only. Rejoin call and verify with another listener.'),step('Stereo widening','width',0,100,'%',false,true),sub('True widening requires PCM processing; mono capture may remain mono.')]),card('Original Discord processing',[toggle('Disable Discord filters','bypass','Requests noise suppression, noise cancellation, AGC and echo cancellation off. Prefer headphones to avoid echo.'),sub('Also requests system input processing bypass if exposed. Use headphones; some filters may remain active.')]),h(RN.View,{style:{marginTop:14}},button(busyUI?'Applying…':'Apply audio controls',()=>run(),busyUI)),h(RN.View,{style:{marginTop:8}},button('Reset / restore original settings',()=>run(true),busyUI)),card('Status',[txt(status,{fontSize:13,lineHeight:19}),sub('Transport hooks: '+stereoHooks+' · Encoder options observed: '+stereoSeen+' · Requests changed: '+stereoChanged),button('Refresh status',update,busyUI)]),h(RN.View,{style:{marginTop:12}},button(showProbe?'Hide diagnostics':'Show diagnostics',()=>setShowProbe(!showProbe))),showProbe?h(RN.View,{style:{height:650,marginTop:12}},h(Settings)):null);
   }
-  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();if(!cfg.pitchEnabled)cfg.autoEnable=false;save();installChat();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicFiles","MicFXMusicInvalid","MicFXMusicStale","MicFXMusicPacketAgeMs","MicFXMusicReadState","MicFXMusicContainerPath","MicFXMusicStatus","MicFXVoicemodStatus","MicFXVoicemodPackets","MicFXVoicemodMixed","MicFXVoicemodGroup","MicFXRecordState","MicFXRecordFiles","MicFXRecordSeconds","MicFXRecordStatus","MicFXRecordFormats","MicFXRecordMixCapable","MicFXIndependentMusicGain","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;recordCommand('stop');nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
+  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();if(!cfg.pitchEnabled)cfg.autoEnable=false;save();installChat();installVoiceSlot();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicFiles","MicFXMusicInvalid","MicFXMusicStale","MicFXMusicPacketAgeMs","MicFXMusicReadState","MicFXMusicContainerPath","MicFXMusicStatus","MicFXVoicemodStatus","MicFXVoicemodPackets","MicFXVoicemodMixed","MicFXVoicemodGroup","MicFXRecordState","MicFXRecordFiles","MicFXRecordSeconds","MicFXRecordStatus","MicFXRecordFormats","MicFXRecordMixCapable","MicFXIndependentMusicGain","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;clearTimeout(voiceSlotTimer);voiceSlotReady=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;recordCommand('stop');nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
 })()
