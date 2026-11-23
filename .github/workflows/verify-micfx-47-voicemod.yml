@@ -1,0 +1,18 @@
+name: Verify MicFX 4.7 Voicemod original controls
+on:
+  push:
+    branches:
+      - micfx-47-voicemod
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate plugin JavaScript
+        run: node --check index.js
+      - name: Verify manifest hash and protected 4.7 features
+        run: |
+          node -e 'const fs=require("fs"),crypto=require("crypto"); const js=fs.readFileSync("index.js","utf8"),m=JSON.parse(fs.readFileSync("manifest.json","utf8")); if(m.hash!==crypto.createHash("sha256").update(js).digest("hex"))throw new Error("hash mismatch"); const required=["Sweet Drums","basiQ","Record processed mic","Hear my processed microphone","Saved presets","Music bridge test","Voicemod soundboard bridge","Voice-call bar MicFX button","Stereo & width","Pitchproof-style processor","8-band microphone EQ","ChannelCallHeaderButtons","CallHeaderButtons","MicFXVoicemodEnabled"]; for(const q of required) if(!js.includes(q))throw new Error("missing "+q);if(/APO v5 bridge status/.test(js))throw Error("Unrelated APO UI remains");'
