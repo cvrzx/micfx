@@ -310,7 +310,14 @@
   const voiceWrapperPath='modules/voice_panel/native/controls/buttons/VoicePanelAnimatedButtonWrapper.tsx';
   const voiceIconPath='design/components/Icon/native/redesign/generated/MicrophoneIcon.tsx';
   const voiceSlotKey='micfx-voice-settings';
-  let voiceSlotReady=false, voiceSlotTimer=null;
+  let voiceSlotReady=false, voiceSlotTimer=null, voiceFallbackReady=false, voiceSlotStatus='Waiting for call module', voiceRowKeys='', voiceRowCalls=0, voiceInserted=0, voiceFallbackSeen=0;
+  const voiceControlsPath='modules/voice_panel/native/controls/VoicePanelVoiceControlsButtons.tsx';
+  function voiceModule(path){
+    // Use the exact path in Discord 344.1, including already-initialized modules even if a previous lookup cached NOT_FOUND.
+    const modules=metro.modules||globalThis.modules;
+    if(modules){for(const id of Object.keys(modules)){const m=modules[id];if(m?.__filePath!==path)continue;const exp=m.publicModule?.exports;if(exp)return exp;}}
+    const owner=globalThis.bunny?.metro;return owner?.findByFilePath?.(path,false)||metro.findByFilePath?.(path,false);
+  }
   function addVoiceSlot(original,render){
     if(!Array.isArray(original)||original.some(slot=>slot.key===voiceSlotKey))return original;
     const leave=original.findIndex(slot=>slot.key==='connected-disconnect');
@@ -331,12 +338,10 @@
   function installVoiceSlot(){
     if(!live||voiceSlotReady)return;
     try{
-      const byPath=globalThis.bunny?.metro?.findByFilePath||metro.findByFilePath;
-      const owner=globalThis.bunny?.metro?.findByFilePath?globalThis.bunny.metro:metro;
-      if(typeof byPath!=='function')throw Error('file path lookup not yet ready');
-      const mod=byPath.call(owner,voiceRowPath), Wrapper=byPath.call(owner,voiceWrapperPath)?.default;
-      const Icon=byPath.call(owner,voiceIconPath)?.MicrophoneIcon;
-      if(typeof mod?.default!=='function'||!Wrapper||!Icon)throw Error('voice row not ready');
+      const mod=voiceModule(voiceRowPath), Wrapper=voiceModule(voiceWrapperPath)?.default;
+      const Icon=voiceModule(voiceIconPath)?.MicrophoneIcon;
+      if(typeof mod?.default!=='function')throw Error('Exact call-row module not found');
+      if(!Wrapper||!Icon)throw Error('Native FX wrapper or icon not found');
       const h=React.createElement, cache=new WeakMap();
       function Shortcut({buttonProps}){
         useRefresh();
@@ -357,20 +362,41 @@
       }
       const render=(key,props)=>h(Shortcut,{key,buttonProps:props});
       const off=vendetta.patcher.after('default',mod,(_,original)=>{
+        voiceRowCalls++;
         if(!live||!cfg.voiceButton||!Array.isArray(original))return;
+        voiceRowKeys=original.map(slot=>String(slot?.key||'?')).join(', ');
         if(!cache.has(original))cache.set(original,addVoiceSlot(original,render));
-        const row=cache.get(original);if(row!==original){voiceSeen++;return row;}
+        const row=cache.get(original);if(row!==original){voiceSeen++;voiceInserted++;voiceSlotStatus='FX slot inserted';return row;}
+        voiceSlotStatus='Call row found; slot layout not supported';
       });
       if(typeof off!=='function')throw Error('voice slot hook unavailable');
-      offs.push(off);voiceSlotReady=true;chatHooks++;notify();
-    }catch(_){}
-    if(live&&!voiceSlotReady)voiceSlotTimer=setTimeout(installVoiceSlot,1000);
+      offs.push(off);voiceSlotReady=true;voiceSlotStatus='Exact row hook installed; waiting for render';chatHooks++;notify();
+    }catch(e){voiceSlotStatus=String(e?.message||e).slice(0,160);}
+    if(live&&!voiceSlotReady)voiceSlotTimer=setTimeout(installVoiceSlot,1500);
+  }
+  let voiceFallbackTimer=null;
+  function installVoiceFallback(){
+    if(!live||voiceFallbackReady)return;
+    try{
+      const mod=voiceModule(voiceControlsPath);
+      if(typeof mod?.default!=='function')throw Error('Call controls component not loaded');
+      const h=React.createElement;
+      function ExtraFX({original,hasSlot}){
+        useRefresh();const [open,setOpen]=React.useState(false);
+        if(!live||!cfg.voiceButton||hasSlot)return original;
+        return h(React.Fragment,null,original,h(RN.View,{style:{alignItems:'center',paddingVertical:4}},h(RN.Pressable,{accessibilityRole:'button',accessibilityLabel:'Open MicFX settings',onPress:()=>setOpen(true),style:{paddingHorizontal:16,paddingVertical:7,borderRadius:10,backgroundColor:'#353047'}},h(RN.Text,{style:{color:'#ded8ff',fontWeight:'700'}},'FX'))),open?h(RN.Modal,{visible:true,animationType:'slide',onRequestClose:()=>setOpen(false)},h(RN.SafeAreaView||RN.View,{style:{flex:1,backgroundColor:'#151519'}},h(RN.Pressable,{accessibilityRole:'button',onPress:()=>setOpen(false),style:{padding:14}},h(RN.Text,{style:{color:'#ded8ff',fontWeight:'700'}},'Done')),h(RN.View,{style:{flex:1}},h(Controls)))):null);
+      }
+      const before=vendetta.patcher.before('default',mod,()=>{voiceFallbackSeen=voiceInserted;});
+      const after=vendetta.patcher.after('default',mod,(_,original)=>{if(!live||!original||!cfg.voiceButton)return;const hasSlot=voiceInserted>voiceFallbackSeen;if(!hasSlot)voiceSlotStatus='Dedicated FX fallback in exact call controls';return h(ExtraFX,{original,hasSlot,key:original.key??undefined});});
+      offs.push(before,after);voiceFallbackReady=true;notify();
+    }catch(e){voiceSlotStatus=voiceSlotStatus+'; fallback unavailable';}
+    if(live&&!voiceFallbackReady)voiceFallbackTimer=setTimeout(installVoiceFallback,2000);
   }
   function installChat(){chatHooks=chatSeen=voiceSeen=0;const after=vendetta.patcher?.after;if(typeof after!=='function')return;const attach=(o,k)=>{if(typeof o?.[k]!=='function')return;try{const off=after(k,o,(args,out)=>{
     if(!live||!out||!args?.[0])return;
     const names=typeNames(args[0]);
     if(cfg.chatButton&&names.includes('ChatInputRightActions')){chatSeen++;return React.createElement(ChatActions,{original:out,key:out.key??undefined});}
-    if(cfg.voiceButton&&!voiceSlotReady&&names.some(n=>vcNames.has(n))){voiceSeen++;return React.createElement(VCBarActions,{original:out,key:out.key??undefined});}
+    // Call controls are never wrapped by guessed component names. Use only the exact call-row hook.
   });if(typeof off==='function'){offs.push(off);chatHooks++;}}catch(_){}};attach(React,'createElement');const rt=lookup('jsx','jsxs');for(const k of ['jsx','jsxs','jsxDEV'])attach(rt,k);}
 
   function TouchRail({value,min,max,disabled,onChange,preview,increment=1}){const h=React.createElement,w=React.useRef(0),[drag,setDrag]=React.useState(null),current=React.useRef(null);const pick=e=>{const x=e?.nativeEvent?.locationX;if(!Number.isFinite(x)||!w.current)return null;return clamp(min+Math.round(clamp(x/w.current,0,1)*(max-min)/increment)*increment,min,max);};const move=e=>{const n=pick(e);if(n!==null){current.current=n;setDrag(n);}};const end=e=>{const n=pick(e)??current.current;setDrag(null);current.current=null;if(n!==null&&n!==value&&!disabled)onChange(n);};const f=clamp(((drag??value)-min)/(max-min),0,1);return h(RN.View,{accessible:true,accessibilityRole:'adjustable',accessibilityValue:{min,max,now:value},accessibilityActions:[{name:'increment'},{name:'decrement'}],onAccessibilityAction:e=>{if(!disabled)onChange(clamp(value+(e.nativeEvent.actionName==='increment'?increment:-increment),min,max));},onLayout:e=>{w.current=e.nativeEvent.layout.width;},onStartShouldSetResponder:()=>!disabled,onMoveShouldSetResponder:()=>!disabled,onResponderGrant:move,onResponderMove:move,onResponderRelease:end,onResponderTerminate:()=>{current.current=null;setDrag(null);},style:{height:34,justifyContent:'center',opacity:disabled?.45:1}},h(RN.View,{pointerEvents:'none',style:{height:5,backgroundColor:'#454850',borderRadius:5}},h(RN.View,{style:{position:'absolute',left:0,width:(100*f)+'%',height:5,backgroundColor:preview?'#777b89':'#818cf8',borderRadius:5}}),h(RN.View,{style:{position:'absolute',left:(100*f)+'%',marginLeft:-7,top:-5,width:15,height:15,borderRadius:8,backgroundColor:'#d5d8ff'}})),drag!==null?h(RN.Text,{pointerEvents:'none',style:{position:'absolute',right:0,top:-9,color:'#a3aaff',fontSize:11}},String(drag)):null);}
@@ -512,7 +538,7 @@
       cfg.basiqEnabled&&Number(readNative('MicFXBasiqAck'))!==request?sub('Waiting for the v4.6 mic processor.'):null,
       ...(cfg.basiqEnabled&&!readNative('MicFXPanelsPath')?['High','Mid','Low','Output'].map(band=>step(band,'basiq'+band,-15,15,' dB',true,false,0.5)):[])
     ]),
-    card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Remember MicFX enabled across launches','autoEnable','Turning MicFX off also disables auto-enable. On relaunch, the actual saved MicFX on/off state is respected.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),toggle('Voice-call bar MicFX button','voiceButton','Opens the full MicFX controls while in a call when Discord exposes a supported voice-bar component.'),sub('Voice slot: '+(voiceSlotReady?'Original row hook installed':'Waiting for original row hook')+' · UI hooks: '+chatHooks+' · chat renders: '+chatSeen+' · voice-bar renders: '+voiceSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),
+    card('Startup & status',[txt(bridgeState(),{fontWeight:'700',color:bridgeState().startsWith('MicFX enabled')?'#64d99a':'#e5e7eb'}),sub(startupState),toggle('Enable MicFX processing','pitchEnabled','Master switch for native pitch, gain and EQ.'),toggle('Remember MicFX enabled across launches','autoEnable','Turning MicFX off also disables auto-enable. On relaunch, the actual saved MicFX on/off state is respected.'),toggle('Show startup notification','startupNotice','Reports the native library acknowledgment; an idle microphone is not a live audio test.'),toggle('Chat-bar FX button','chatButton','Adds a quick native processor toggle next to the chat actions.'),toggle('Voice-call bar MicFX button','voiceButton','Opens the full MicFX controls while in a call when Discord exposes a supported voice-bar component.'),sub('FX status: '+voiceSlotStatus+' · row calls: '+voiceRowCalls+' · inserted: '+voiceInserted+' · fallback: '+(voiceFallbackReady?'installed':'waiting')),sub('Call row keys: '+(voiceRowKeys||'Not seen')),sub('UI hooks: '+chatHooks+' · chat renders: '+chatSeen+' · voice-bar renders: '+voiceSeen+(storageOK?' · Storage ready':' · Storage unavailable'))]),
     card('Saved presets',[
       sub('Save your current pitch, EQ, gain, music bridge, and audio filter settings. Loading a preset applies it immediately. Maximum 20 presets.'),
       h(RN.TextInput,{
@@ -598,5 +624,5 @@
       advancedNotice?sub(advancedNotice):null
     ]),card('Pitchproof-style processor',[step('Pitch','pitch',-12,12,' st',true),step('Detune','detune',-100,100,' cents',true),step('Blend','blend',0,100,'%',false),sub(nativeStatus()),sub('Capture rate: '+(Number(readNative('MicFXNativeRate'))||'unknown')+' Hz')]),card('8-band microphone EQ',[toggle('Enable equalizer','eqEnabled','Native microphone equalizer, applied after pitch and before gain.'),eqPlot(),h(RN.View,{style:{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:12}},...Object.entries(eqPresets).map(([name,values])=>h(RN.View,{key:name},button(name,()=>setPreset(values),busyUI)))),...eqLabels.map(eqRow),sub('85 Hz and 8 kHz are shelves; other bands are bell filters. High bands outside the current capture bandwidth are skipped. Bass boosts may trigger the limiter.'),button('Reset EQ to flat',()=>setPreset(eqPresets.Flat),busyUI)]),card('Stereo & width',[toggle('Request stereo encoding','stereo','Experimental: changes existing encoder channel fields only. Rejoin call and verify with another listener.'),step('Stereo widening','width',0,100,'%',false,true),sub('True widening requires PCM processing; mono capture may remain mono.')]),card('Original Discord processing',[toggle('Disable Discord filters','bypass','Requests noise suppression, noise cancellation, AGC and echo cancellation off. Prefer headphones to avoid echo.'),sub('Also requests system input processing bypass if exposed. Use headphones; some filters may remain active.')]),h(RN.View,{style:{marginTop:14}},button(busyUI?'Applying…':'Apply audio controls',()=>run(),busyUI)),h(RN.View,{style:{marginTop:8}},button('Reset / restore original settings',()=>run(true),busyUI)),card('Status',[txt(status,{fontSize:13,lineHeight:19}),sub('Transport hooks: '+stereoHooks+' · Encoder options observed: '+stereoSeen+' · Requests changed: '+stereoChanged),button('Refresh status',update,busyUI)]),h(RN.View,{style:{marginTop:12}},button(showProbe?'Hide diagnostics':'Show diagnostics',()=>setShowProbe(!showProbe))),showProbe?h(RN.View,{style:{height:650,marginTop:12}},h(Settings)):null);
   }
-  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();if(!cfg.pitchEnabled)cfg.autoEnable=false;save();installChat();installVoiceSlot();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicFiles","MicFXMusicInvalid","MicFXMusicStale","MicFXMusicPacketAgeMs","MicFXMusicReadState","MicFXMusicContainerPath","MicFXMusicStatus","MicFXVoicemodStatus","MicFXVoicemodPackets","MicFXVoicemodMixed","MicFXVoicemodGroup","MicFXRecordState","MicFXRecordFiles","MicFXRecordSeconds","MicFXRecordStatus","MicFXRecordFormats","MicFXRecordMixCapable","MicFXCallAudioRecorderCapable","MicFXCallAudioRate","MicFXCallAudioCallbacks","MicFXCallAudioRecordedFrames","MicFXIndependentMusicGain","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;clearTimeout(voiceSlotTimer);voiceSlotReady=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;recordCommand('stop');nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
+  return {settings:Controls,onLoad(){if(live)return;live=true;load();migratePresets();if(!cfg.pitchEnabled)cfg.autoEnable=false;save();installChat();installVoiceSlot();installVoiceFallback();try{nativeWatch=RN.Settings?.watchKeys?.(["MicFXNativeAck","MicFXNativeOn","MicFXNativeHooked","MicFXPitchStatus","MicFXNativeRate","MicFXMusicPackets","MicFXMusicMixed","MicFXMusicFiles","MicFXMusicInvalid","MicFXMusicStale","MicFXMusicPacketAgeMs","MicFXMusicReadState","MicFXMusicContainerPath","MicFXMusicStatus","MicFXVoicemodStatus","MicFXVoicemodPackets","MicFXVoicemodMixed","MicFXVoicemodGroup","MicFXRecordState","MicFXRecordFiles","MicFXRecordSeconds","MicFXRecordStatus","MicFXRecordFormats","MicFXRecordMixCapable","MicFXCallAudioRecorderCapable","MicFXCallAudioRate","MicFXCallAudioCallbacks","MicFXCallAudioRecordedFrames","MicFXIndependentMusicGain","MicFXMixSessionHooks","MicFXMixSessionPatches","MicFXMixSessionFailures","MicFXAppliedGainDb","MicFXMusicAppliedGainDb","MicFXMusicPitchOn","MicFXCallMixStatus"],notify);}catch(_){}void applyControls();checkStartup();},onUnload(){live=false;clearTimeout(voiceSlotTimer);clearTimeout(voiceFallbackTimer);voiceSlotReady=false;voiceFallbackReady=false;startupRun++;clearTimeout(startupTimer);try{if(nativeWatch!=null)RN.Settings?.clearWatch?.(nativeWatch);}catch(_){}nativeWatch=null;recordCommand('stop');nativeDisable();stereoActive=false;generation++;busy=false;report='';for(const off of offs.splice(0)){try{off();}catch(_){}};restoring=Promise.resolve().then(async()=>{while(writing)await new Promise(r=>setTimeout(r,20));try{await restoreGain();}catch(_){}try{await restoreFilters();}catch(_){}});}};
 })()
